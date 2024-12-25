@@ -22,6 +22,7 @@ class UserOutputModule(object):
     @classmethod
     def run_module(cls,
                    cds_sequence: str,
+                   artifacts_path: str,
                    output_path: str = None):
         logger.info('###########################')
         logger.info('# USER OUTPUT INFORMATION #')
@@ -30,13 +31,15 @@ class UserOutputModule(object):
         logger.info("Output zip file directory path: %s", output_path)
 
         zip_file_path = cls._create_final_zip(output_path=output_path,
-                                              cds_sequence=cds_sequence)
+                                              cds_sequence=cds_sequence,
+                                              artifacts_path=artifacts_path)
 
         return zip_file_path
 
     @classmethod
     def _create_final_zip(cls,
                           cds_sequence: str,
+                          artifacts_path: str,
                           output_path: typing.Optional[str] = None) -> str:
         zip_output_path = output_path or "."
         # Create a ZipFile Object
@@ -44,7 +47,7 @@ class UserOutputModule(object):
         # Add multiple files to the zip
         with ZipFile(zip_file_path, 'w') as zip_object:
             # Add Fasta file
-            cls._add_sequence_fasta(zip_object=zip_object, cds_sequence=cds_sequence)
+            cls._add_sequence_fasta(zip_object=zip_object, cds_sequence=cds_sequence, artifacts_path=artifacts_path)
             # Add log file
             cls._write_log_file(zip_object=zip_object)
 
@@ -57,9 +60,8 @@ class UserOutputModule(object):
                          arcname=os.path.join(cls._LOGS_SUBDIRECTORY, log_file_name))
 
     @classmethod
-    def _add_sequence_fasta(cls, zip_object, cds_sequence: str) -> None:
-        file_name = os.path.join(str(Path(LoggerFactory.LOG_DIRECTORY).parent.resolve()),
-                                 cls._FINAL_OPTIMIZED_SEQUENCE_FILE_NAME)
+    def _add_sequence_fasta(cls, zip_object, cds_sequence: str, artifacts_path: str) -> None:
+        file_name = os.path.join(artifacts_path, cls._FINAL_OPTIMIZED_SEQUENCE_FILE_NAME)
         write_fasta(fid=file_name, list_seq=(cds_sequence,), list_name=("ORF_sequence", ))
         zip_object.write(filename=cls._add_fasta_suffix(file_name),
                          arcname=cls._add_fasta_suffix(cls._FINAL_OPTIMIZED_SEQUENCE_FILE_NAME))

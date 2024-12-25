@@ -156,7 +156,7 @@ def run_single_method_for_orf_sequence(optimization_method: str,
         output_path=os.path.join("results", output_path),
         initiation_optimization_method=initiation_optimization_method,  # original, external
     )
-    return run_modules(default_user_inp_raw)
+    return run_modules(default_user_inp_raw, should_run_output_module=False)
     # return run_orf_module(default_user_inp_raw)
     # run_input_processing(default_user_inp_raw)
 
@@ -206,16 +206,16 @@ def generate_sequences_fasta_file(root_dir) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Analysis script parser")
-    parser.add_argument('-s', '--start', type=str, required=True, help="Fasta record description to start running from")
-    parser.add_argument('-n', '--number', type=int, help="Number of records to parse from the given start record")
-    parser.add_argument('-f', '--fasta', type=str, help="Fasta file for orf sequences to run on (for endogenous run)")
-    parser.add_argument('-m', '--method', type=str, help="Optimization method")
-    parser.add_argument('-i', '--index', type=str, help="Optimization CUB index")
-    parser.add_argument('--opt', type=bool, help="Boolean indicating whether e.coli is optimized or not")
-    parser.add_argument('-o', '--output', type=str, help="Output path")
-
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser(description="Analysis script parser")
+    # parser.add_argument('-s', '--start', type=str, required=True, help="Fasta record description to start running from")
+    # parser.add_argument('-n', '--number', type=int, help="Number of records to parse from the given start record")
+    # parser.add_argument('-f', '--fasta', type=str, help="Fasta file for orf sequences to run on (for endogenous run)")
+    # parser.add_argument('-m', '--method', type=str, help="Optimization method")
+    # parser.add_argument('-i', '--index', type=str, help="Optimization CUB index")
+    # parser.add_argument('--opt', type=bool, help="Boolean indicating whether e.coli is optimized or not")
+    # parser.add_argument('-o', '--output', type=str, help="Output path")
+    #
+    # args = parser.parse_args()
 
     # run_all_methods(orf_sequence_file=DEFAULT_SEQUENCE_FILE_PATH,
     #                 output_path="mcherry_debug")
@@ -238,10 +238,10 @@ if __name__ == "__main__":
     # gene_sequence = str(gene_sequence.seq)
     initiation_type = "external"
     results = run_single_method_for_orf_sequence(
-        optimization_method="zscore_single_aa_diff",
+        # optimization_method="zscore_single_aa_diff",
         # optimization_method="zscore_bulk_aa_diff",
-        # optimization_method="single_codon_diff",
-        optimization_cub_index="CAI",
+        optimization_method="single_codon_diff",
+        optimization_cub_index="tAI",
         is_ecoli_optimized=True,
         output_path=f"mcherry-debug-{initiation_type}-0.1",
         orf_sequence_file=DEFAULT_SEQUENCE_FILE_PATH,

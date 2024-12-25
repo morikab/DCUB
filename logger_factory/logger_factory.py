@@ -15,7 +15,7 @@ class QueueHandler(logging.Handler):
 
 
 class LoggerFactory(object):
-    LOG_DIRECTORY = str(os.path.join(Path(__file__).parent.resolve(), "artifacts", "logs"))
+    LOG_DIRECTORY = str(os.path.join(Path(__file__).parent.parent.resolve(), "modules", "artifacts", "logs"))
     LOG_FILE_NAME = "log.txt"
     _QUEUE_HANDLER_NAME = "queue_handler"
 
