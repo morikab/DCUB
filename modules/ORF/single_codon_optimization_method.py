@@ -23,6 +23,7 @@ def optimize_sequence(
         tuning_param: float,
         skipped_codons_num: int,
         run_summary: RunSummary,
+        should_dedup_codons: bool = config["ORF"]["DEDUP_CODONS"],
 ) -> str:
     with Timer() as timer:
         aa_to_loss_mapping = _calculate_codons_loss(organisms=organisms,
@@ -38,10 +39,12 @@ def optimize_sequence(
         for i in range(skipped_codons_num, len(target_protein)):
             aa = target_protein[i]
             should_use_second_optimal_codon = False
-            for j in range(i-1, skipped_codons_num, -1):
-                if target_protein[j] != aa:
-                    break
-                should_use_second_optimal_codon = i-j % 2 != 0
+
+            if should_dedup_codons:
+                for j in range(i-1, skipped_codons_num, -1):
+                    if target_protein[j] != aa:
+                        break
+                    should_use_second_optimal_codon = i-j % 2 != 0
 
             candidate_optimal_codons = aa_to_loss_mapping[aa].copy()
             optimal_codon = _get_optimal_codon(candidate_optimal_codons, organisms)

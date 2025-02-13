@@ -29,6 +29,7 @@ def optimize_sequence_by_zscore_single_aa(
         skipped_codons_num: int,
         run_summary: RunSummary,
         max_iterations: int = config["ORF"]["ZSCORE_MAX_ITERATIONS"],
+        should_dedup_codons: bool = config["ORF"]["DEDUP_CODONS"],
 ):
     """
     Iterative codon optimization:
@@ -38,26 +39,31 @@ def optimize_sequence_by_zscore_single_aa(
     """
     with Timer() as timer:
         initial_sequence = sequence
-        previous_sequence_score = _calculate_zscore_for_sequence(
+        previous_sequence_zscore = _calculate_zscore_for_sequence(
             sequence=sequence,
             module_input=module_input,
             optimization_cub_index=optimization_cub_index,
             skipped_codons_num=skipped_codons_num,
         )
         initial_sequence_score = None
+        previous_sequence_score = get_total_score(zscore=previous_sequence_zscore,
+                                                  optimization_method=optimization_method,
+                                                  tuning_parameter=module_input.tuning_parameter)
 
         aa_to_codon_mapping = defaultdict(str)
         iterations_count = 0
         iterations_summary = []
-        # Single codon replacement
         for run in range(max_iterations):
             iterations_count = run + 1
             # Include also the sequence from the previous iteration
-            sequence_to_zscore = {sequence: previous_sequence_score}
+            sequence_to_zscore = {sequence: previous_sequence_zscore}
             tested_sequence_to_codon = defaultdict(list)
             for codon in nt_to_aa.keys():
                 if nt_to_aa[codon] == "_" and optimization_cub_index.is_trna_adaptation_index:
                     # There is no point in optimizing stop codon by tAI weights, so keep the original codon
+                    continue
+                if len(synonymous_codons[nt_to_aa[codon]]) < 2:
+                    # The codon does not have any other synonymous codons
                     continue
                 tested_sequence = change_all_codons_of_aa(
                     seq=sequence,
@@ -117,32 +123,6 @@ def optimize_sequence_by_zscore_single_aa(
 
             new_sequence_score = sequence_to_total_score[new_sequence]
 
-            # Dedup repeating codons by using the second-best option of a synonymous codon
-            for selected_codon in selected_codons:
-                synonymous_codons_of_selected_codon = synonymous_codons.get(nt_to_aa.get(selected_codon)).copy()
-                synonymous_codons_of_selected_codon.remove(selected_codon)
-                if not synonymous_codons_of_selected_codon:
-                    continue
-                candidate_codons_sequences = []
-                for candidate_codon in synonymous_codons_of_selected_codon:
-                    for sequence in tested_sequence_to_codon.keys():
-                        if candidate_codon in tested_sequence_to_codon[sequence]:
-                            candidate_codons_sequences.append(sequence)
-                            continue
-                candidate_codons_scores = {sequence: score for sequence, score in tested_sequence_to_codon.items() if
-                                           sequence in candidate_codons_sequences}
-                candidate_sequence = max(candidate_codons_scores, key=candidate_codons_scores.get)
-                for candidate_codon in tested_sequence_to_codon.get(candidate_sequence):
-                    if nt_to_aa[candidate_codon] == nt_to_aa[selected_codon]:
-                        new_sequence = change_all_codons_of_aa(
-                            seq=new_sequence,
-                            selected_codon=selected_codon,
-                            skipped_codons_num=skipped_codons_num,
-                            default_codon=candidate_codon,
-                            should_dedup_codons=True,
-                        )
-                        break
-
             # Summary information
             codon_to_score = {}
             for codon_sequence in sequence_to_total_score:
@@ -156,15 +136,49 @@ def optimize_sequence_by_zscore_single_aa(
             }
             iterations_summary.append(iteration_summary)
 
+            if new_sequence == sequence or previous_sequence_score > new_sequence_score:
+                break
+
+            sequence = new_sequence
+            previous_sequence_score = new_sequence_score
             for selected_codon in selected_codons:
                 # If the aa does not appear at all in the cds, this may give a faulty result (that should be consistent)
                 aa_to_codon_mapping[nt_to_aa[selected_codon]] = selected_codon
 
-            if new_sequence == sequence:
-                break
-            else:
-                sequence = new_sequence
-                previous_sequence_score = new_sequence_score
+    if should_dedup_codons:
+        # Dedup repeating codons by using the second-best option of a synonymous codon for each selected codon
+        for aa in aa_to_codon_mapping.keys():
+            selected_aa_codon = None
+            synonymous_codons_of_aa = synonymous_codons.get(aa).copy()
+            for codon in synonymous_codons_of_aa:
+                codon_index = sequence.find(codon)
+                if codon_index != -1:
+                    selected_aa_codon = codon
+                    break
+            synonymous_codons_of_aa.remove(selected_aa_codon)
+
+            candidate_codons_sequences = []
+            for candidate_codon in synonymous_codons_of_aa:
+                # we determine the default codon based on the scores in the last iteration
+                for seq in tested_sequence_to_codon.keys():
+                    if candidate_codon in tested_sequence_to_codon[seq]:
+                        candidate_codons_sequences.append(seq)
+                        continue
+            candidate_codons_scores = {seq: score for seq, score in
+                                       sequence_to_total_score.items() if seq in candidate_codons_sequences}
+            candidate_codon_entry = max(candidate_codons_scores, key=candidate_codons_scores.get)
+            default_aa_codon = None
+            for candidate_aa_default_codon in tested_sequence_to_codon.get(candidate_codon_entry):
+                if nt_to_aa[candidate_aa_default_codon] == nt_to_aa[selected_aa_codon]:
+                    default_aa_codon = candidate_aa_default_codon
+                    break
+            sequence = change_all_codons_of_aa(
+                seq=sequence,
+                selected_codon=selected_aa_codon,
+                skipped_codons_num=skipped_codons_num,
+                default_codon=default_aa_codon,
+                should_dedup_codons=True,
+            )
 
     orf_summary = {
         "initial_sequence": initial_sequence,
@@ -190,6 +204,7 @@ def optimize_sequence_by_zscore_bulk_aa(
         skipped_codons_num: int,
         run_summary: RunSummary,
         max_iterations: int = config["ORF"]["ZSCORE_MAX_ITERATIONS"],
+        should_dedup_codons: bool = config["ORF"]["DEDUP_CODONS"],
 ):
     with Timer() as timer:
         initial_sequence = sequence
@@ -203,6 +218,7 @@ def optimize_sequence_by_zscore_bulk_aa(
         iterations_count = 0
         iterations_summary = []
         for run in range(max_iterations):
+            logger.info(f"Starting run {run+1}.")
             iterations_count = run + 1
             codons_to_zscore = {}
             for codon in nt_to_aa.keys():
@@ -257,7 +273,7 @@ def optimize_sequence_by_zscore_bulk_aa(
                     selected_codon=aa_to_selected_codon[aa],
                     default_codon=aa_to_default_codon[aa],
                     skipped_codons_num=skipped_codons_num,
-                    should_dedup_codons=True,
+                    should_dedup_codons=should_dedup_codons,
                 )
 
             # Calculate score after all replacements
@@ -279,6 +295,7 @@ def optimize_sequence_by_zscore_bulk_aa(
 
             iteration_summary = {
                 "aa_to_selected_codon": aa_to_selected_codon,
+                "aa_to_default_codon": aa_to_default_codon,
                 "sequence_score": score,
             }
             iterations_summary.append(iteration_summary)
@@ -334,10 +351,12 @@ def _get_optimal_codon_per_aa(
             if average_frequency >= config["ORF"]["FREQUENCY_OPTIMIZATION_THRESHOLD"]:
                 if selected_codon is None:
                     selected_codon = candidate_codon
-                    logger.info(f"Found optimal codon. Now looking for second-best option.")
+                    logger.info(f"Found optimal codon {selected_codon} for amino acid {aa}. "
+                                f"Now looking for second-best option.")
                     codons_list.remove(candidate_codon)
                 else:
                     default_codon = candidate_codon
+                    logger.info(f"Found default codon {default_codon} for amino acid {aa}.")
                     break
             else:
                 logger.info(
