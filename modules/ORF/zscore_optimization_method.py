@@ -141,6 +141,13 @@ def optimize_sequence_by_zscore_single_aa(
 
             sequence = new_sequence
             previous_sequence_score = new_sequence_score
+            # We need the zscore of the sequence so we can normalize it according to the new iteration's range
+            previous_sequence_zscore = _calculate_zscore_for_sequence(
+                sequence=sequence,
+                module_input=module_input,
+                optimization_cub_index=optimization_cub_index,
+                skipped_codons_num=skipped_codons_num,
+            )
             for selected_codon in selected_codons:
                 # If the aa does not appear at all in the cds, this may give a faulty result (that should be consistent)
                 aa_to_codon_mapping[nt_to_aa[selected_codon]] = selected_codon
