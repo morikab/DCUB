@@ -46,9 +46,6 @@ def optimize_sequence_by_zscore_single_aa(
             skipped_codons_num=skipped_codons_num,
         )
         initial_sequence_score = None
-        previous_sequence_score = get_total_score(zscore=previous_sequence_zscore,
-                                                  optimization_method=optimization_method,
-                                                  tuning_parameter=module_input.tuning_parameter)
 
         aa_to_codon_mapping = defaultdict(str)
         iterations_count = 0
@@ -92,6 +89,7 @@ def optimize_sequence_by_zscore_single_aa(
                                                  tuning_parameter=module_input.tuning_parameter) for
                 sequence_option, sequence_score in sequence_to_zscore.items()
             }
+            previous_sequence_score = sequence_to_total_score[sequence]
             if initial_sequence_score is None:
                 initial_sequence_score = sequence_to_total_score[initial_sequence]
 

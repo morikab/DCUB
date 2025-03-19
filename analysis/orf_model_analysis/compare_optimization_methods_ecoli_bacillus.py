@@ -238,10 +238,10 @@ if __name__ == "__main__":
     initiation_type = "external"
     results = run_single_method_for_orf_sequence(
         # optimization_method="zscore_single_aa_diff",
-        optimization_method="zscore_bulk_aa_diff",
+        optimization_method="zscore_single_aa_ratio",
         # optimization_method="single_codon_diff",
         optimization_cub_index="CAI",
-        is_ecoli_optimized=False,
+        is_ecoli_optimized=True,
         output_path=f"mcherry-debug",
         orf_sequence_file=DEFAULT_SEQUENCE_FILE_PATH,
         initiation_optimization_method=initiation_type,
