@@ -155,22 +155,22 @@ class UserInputModule(object):
 
         # FIXME - end
         try:
-            # TODO - start debugging from here...
-            gb_file = SeqIO.read(gb_path, format="gb")
-            organism_name = " ".join(gb_file.description.split()[:2])
-        except:
+            with open(gb_path, "r") as gb_file_handle:
+                first_gb_record = next(SeqIO.parse(gb_file_handle, format="genbank"))
+            organism_name = " ".join(first_gb_record.description.split()[:2])
+        except Exception as e:
             raise ValueError(
                 f'Error in genome GenBank file: {gb_path}, make sure you inserted an undamaged .gb file containing '
                 f'the full genome sequence and annotations'
-            )
+            ) from e
         logger.info("------------------------------------------")
         logger.info(f"Parsing information for {organism_name}:")
         logger.info("------------------------------------------")
         logger.info(f"Organism is defined as {'wanted' if is_optimized else 'unwanted'}")
         cds = extract_gene_data(genbank_path=gb_path)
 
-        exp_csv_type = organism_input['expression_csv_type']
-        exp_csv_fid = organism_input['expression_csv']
+        exp_csv_type = organism_input.get("expression_csv_type")
+        exp_csv_fid = organism_input.get("expression_csv")
         estimated_expression = extract_gene_expression(cds=cds,
                                                        expression_csv_fid=exp_csv_fid,
                                                        expression_csv_type=exp_csv_type)
@@ -218,8 +218,8 @@ class UserInputModule(object):
         org_summary["reference_genes"] = reference_genes
         write_fasta(fid=organism_name, list_seq=list(cds_dict.values()), list_name=list(cds_dict.keys()))
 
-        with open(parsed_organism_file, "w") as organism_file:
-            json.dump(org_summary, organism_file)
+        # with open(parsed_organism_file, "w") as organism_file:
+        #     json.dump(org_summary, organism_file)
         # FIXME - end
 
         if optimization_cub_index.is_codon_adaptation_index:

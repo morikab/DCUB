@@ -65,6 +65,7 @@ def generate_testing_data(
         sequence: str = None,
         output_path: str = None,
         initiation_optimization_method: str = None,
+        evaluation_score: str = None,
 ) -> typing.Dict[str, typing.Any]:
     assert (sequence is not None or sequence_file_path is not None), \
         "Should provide either a sequence or a sequence file path"
@@ -82,6 +83,7 @@ def generate_testing_data(
         "orf_optimization_method": orf_optimization_method,
         "orf_optimization_cub_index": orf_optimization_cub_index,
         "initiation_optimization_method": initiation_optimization_method,
+        "evaluation_score": evaluation_score or "average_distance",
         "output_path": output_directory,
         "organisms": {},
     }

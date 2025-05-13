@@ -9,6 +9,7 @@ from Bio import SeqIO
 
 from analysis.input_testing_data.generate_input_testing_data_for_modules import \
     generate_testing_data_for_ecoli_and_bacillus
+from analysis.input_testing_data.generate_input_testing_data_for_modules import generate_testing_data
 from modules.main import run_modules
 from modules.main import run_input_processing
 from modules.main import run_orf_module
@@ -17,6 +18,7 @@ from modules.main import run_orf_module
 current_directory = Path(__file__).parent.resolve()
 base_path = os.path.join(Path(current_directory).parent.resolve(), "example_data")
 DEFAULT_SEQUENCE_FILE_PATH = os.path.join(base_path, "mCherry_original.fasta")
+arabidopsis_genomes_path = os.path.join(base_path, "arabidopsis_microbiome")
 
 
 def run_from_fasta_file(fasta_file_path: str,
@@ -59,7 +61,7 @@ def run_for_endogenous_genes(fasta_file_path: str,
         if len(gene_sequence) % 3 != 0:
             print(F"Invalid length {len(gene_sequence)} for gene {gene_name}")
             continue
-        results_dict[gene_name] = run_single_method_for_orf_sequence(
+        results_dict[gene_name] = run_single_method_ecoli_and_bacillus(
             optimization_method=optimization_method,
             optimization_cub_index=optimization_cub_index,
             is_ecoli_optimized=is_ecoli_optimized,
@@ -88,12 +90,12 @@ def run_all_methods(orf_sequence: typing.Optional[str] = None,
     ]:
         for optimization_cub_index in ["CAI", "tAI"]:
             for direction in [True, False]:
-                run_single_method_for_orf_sequence(optimization_method=optimization_method,
-                                                   optimization_cub_index=optimization_cub_index,
-                                                   is_ecoli_optimized=direction,
-                                                   orf_sequence=orf_sequence,
-                                                   orf_sequence_file=orf_sequence_file,
-                                                   output_path=output_path)
+                run_single_method_ecoli_and_bacillus(optimization_method=optimization_method,
+                                                     optimization_cub_index=optimization_cub_index,
+                                                     is_ecoli_optimized=direction,
+                                                     orf_sequence=orf_sequence,
+                                                     orf_sequence_file=orf_sequence_file,
+                                                     output_path=output_path)
 
 
 def extract_ncbi_sequences_for_analysis(fasta_file_path: str) -> None:
@@ -136,14 +138,16 @@ def extract_ncbi_sequences_for_analysis(fasta_file_path: str) -> None:
         json.dump(gene_to_longest_sequence, genes_file)
 
 
-def run_single_method_for_orf_sequence(optimization_method: str,
-                                       is_ecoli_optimized: bool,
-                                       orf_sequence: typing.Optional[str] = None,
-                                       orf_sequence_file: typing.Optional[str] = None,
-                                       output_path: typing.Optional[str] = None,
-                                       optimization_cub_index: str = "CAI",
-                                       tuning_param: float = 0.5,
-                                       initiation_optimization_method: str = "original"):
+def run_single_method_ecoli_and_bacillus(
+        optimization_method: str,
+        is_ecoli_optimized: bool,
+        orf_sequence: typing.Optional[str] = None,
+        orf_sequence_file: typing.Optional[str] = None,
+        output_path: typing.Optional[str] = None,
+        optimization_cub_index: str = "CAI",
+        tuning_param: float = 0.5,
+        initiation_optimization_method: str = "original",
+):
     default_user_inp_raw = generate_testing_data_for_ecoli_and_bacillus(
         orf_optimization_method=optimization_method,
         orf_optimization_cub_index=optimization_cub_index,
@@ -159,6 +163,27 @@ def run_single_method_for_orf_sequence(optimization_method: str,
     # return run_orf_module(default_user_inp_raw)
     # run_input_processing(default_user_inp_raw)
 
+def run_single_method_arabidopsis(
+        optimization_method: str,
+        wanted_hosts: list[str],
+        unwanted_hosts: list[str],
+        orf_sequence: typing.Optional[str] = None,
+        orf_sequence_file: typing.Optional[str] = None,
+        output_path: typing.Optional[str] = None,
+        optimization_cub_index: str = "CAI",
+        tuning_param: float = 0.5,
+        initiation_optimization_method: str = "original",
+):
+    user_input = generate_testing_data(
+            orf_optimization_method = optimization_method,
+            orf_optimization_cub_index = optimization_cub_index,
+            wanted_hosts = wanted_hosts,
+            unwanted_hosts = unwanted_hosts,
+            sequence_file_path = orf_sequence_file,
+            output_path = os.path.join("results", "arabidopsis"),
+            initiation_optimization_method=initiation_optimization_method,
+        )
+    return run_modules(user_input, should_run_output_module=False)
 
 def compare_gene_mappings() -> None:
     with open("gene_to_longest_sequence_all.json") as gene_mapping_file:
@@ -205,48 +230,36 @@ def generate_sequences_fasta_file(root_dir) -> None:
 
 
 if __name__ == "__main__":
-    # parser = argparse.ArgumentParser(description="Analysis script parser")
-    # parser.add_argument('-s', '--start', type=str, required=True, help="Fasta record description to start running from")
-    # parser.add_argument('-n', '--number', type=int, help="Number of records to parse from the given start record")
-    # parser.add_argument('-f', '--fasta', type=str, help="Fasta file for orf sequences to run on (for endogenous run)")
-    # parser.add_argument('-m', '--method', type=str, help="Optimization method")
-    # parser.add_argument('-i', '--index', type=str, help="Optimization CUB index")
-    # parser.add_argument('--opt', type=bool, help="Boolean indicating whether e.coli is optimized or not")
-    # parser.add_argument('-o', '--output', type=str, help="Output path")
-    #
-    # args = parser.parse_args()
-
-    # run_all_methods(orf_sequence_file=DEFAULT_SEQUENCE_FILE_PATH,
-    #                 output_path="mcherry_debug")
-
-    # run_single_method_for_orf_sequence(optimization_method="zscore_single_aa_ratio",
-    #                                    optimization_cub_index="CAI",
-    #                                    is_ecoli_optimized=True,
-    #                                    orf_sequence_file=DEFAULT_SEQUENCE_FILE_PATH,
-    #                                    output_path="mcherry_debug")
-
-    # fasta_file_path = r"C:\projects\Igem_TAU_2021_moran\analysis\example_data\Escherichia-coli.fasta"
-    # with open(fasta_file_path, "r") as fasta_handle:
-    #     genome_dict = SeqIO.to_dict(SeqIO.parse(fasta_handle, "fasta"), lambda r: r.description)
-
+    # Local debugging of a specific gene
     # with open(r"C:\projects\Igem_TAU_2021_moran\analysis\example_data\Bacillus-subtilis.fasta", "r") as fasta_handle:
     #     genome_dict = SeqIO.to_dict(SeqIO.parse(fasta_handle, "fasta"), lambda r: r.description)
     # gene_name = "thrA|fused aspartate kinase/homoserine dehydrogenase 1"
     #
     # gene_sequence = genome_dict[gene_name]
     # gene_sequence = str(gene_sequence.seq)
-    initiation_type = "external"
-    results = run_single_method_for_orf_sequence(
-        # optimization_method="zscore_single_aa_diff",
-        optimization_method="zscore_single_aa_ratio",
-        # optimization_method="single_codon_diff",
+
+
+    # Local debugging of arabidopsis run
+    zora_gene = os.path.join(base_path, "zorA_anti_phage_defense.fasta")
+    results = run_single_method_arabidopsis(
+        optimization_method="single_codon_diff",
         optimization_cub_index="CAI",
-        is_ecoli_optimized=True,
-        output_path=f"mcherry-debug",
-        orf_sequence_file=DEFAULT_SEQUENCE_FILE_PATH,
-        initiation_optimization_method=initiation_type,
-        # orf_sequence="",
+        wanted_hosts=["Arthrobacter_parietis.gbff"],
+        unwanted_hosts=["Arthrobacter_ginsengisoli.gbff"],
+        orf_sequence_file=zora_gene,
     )
-    # FIXME - debugging sequences 5 & 7 for in-vitro experiment
-    print("Final seq: " + results["final_evaluation"]["final_sequence"])
-    # TODO - add to the logs the optimal and second best codons and make the replacement manually
+
+    # Local debugging of mcherry variants
+    # initiation_type = "external"
+    # results = run_single_method_ecoli_and_bacillus(
+    #     # optimization_method="zscore_single_aa_diff",
+    #     optimization_method="zscore_single_aa_ratio",
+    #     # optimization_method="single_codon_diff",
+    #     optimization_cub_index="CAI",
+    #     is_ecoli_optimized=True,
+    #     output_path=f"mcherry-debug",
+    #     orf_sequence_file=DEFAULT_SEQUENCE_FILE_PATH,
+    #     initiation_optimization_method=initiation_type,
+    #     # orf_sequence="",
+    # )
+    # print("Final seq: " + results["final_evaluation"]["final_sequence"])
