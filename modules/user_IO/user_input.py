@@ -155,6 +155,7 @@ class UserInputModule(object):
 
         # FIXME - end
         try:
+            # TODO - start debugging from here...
             gb_file = SeqIO.read(gb_path, format="gb")
             organism_name = " ".join(gb_file.description.split()[:2])
         except:

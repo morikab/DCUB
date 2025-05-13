@@ -68,10 +68,10 @@ def generate_testing_data(
 ) -> typing.Dict[str, typing.Any]:
     assert (sequence is not None or sequence_file_path is not None), \
         "Should provide either a sequence or a sequence file path"
-
+    assert output_path is not None, "should provide an output path"
     output_path = os.path.join("results", output_path)
     output_directory = os.path.join(output_path, F"{orf_optimization_cub_index}_{orf_optimization_method}_"
-                                                 F"{len(wanted_hosts) + len(unwanted_hosts)}_"
+                                                 F"wanted_{len(wanted_hosts)}_unwanted_{len(unwanted_hosts)}_"
                                                  F"{generate_random_string(4)}")
     Path(output_directory).mkdir(parents=True, exist_ok=True)
     input_dict = {
