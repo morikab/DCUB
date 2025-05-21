@@ -169,6 +169,7 @@ class UserInputModule(object):
         logger.info(f"Organism is defined as {'wanted' if is_optimized else 'unwanted'}")
         cds = extract_gene_data(genbank_path=gb_path)
 
+        print(organism_input)
         exp_csv_type = organism_input.get("expression_csv_type")
         exp_csv_fid = organism_input.get("expression_csv")
         estimated_expression = extract_gene_expression(cds=cds,
