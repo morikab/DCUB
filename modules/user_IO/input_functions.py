@@ -108,7 +108,6 @@ def extract_gene_name(feature) -> typing.Optional[str]:
     name = feature.qualifiers.get("gene") or feature.qualifiers.get("locus_tag")
     if name is None:
         return name
-    # TODO - should return the complete name?
     return name[0]
     # return "-".join(list(name))
 
@@ -136,7 +135,6 @@ def extract_cds(cds_features: typing.List, sequence: Seq) -> typing.Sequence[mod
         ))
 
     return cds_list
-
 
 def extract_gene_data(genbank_path: str):
     gb_records = SeqIO.parse(genbank_path, format="genbank")

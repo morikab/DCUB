@@ -230,25 +230,25 @@ def generate_sequences_fasta_file(root_dir) -> None:
 
 
 if __name__ == "__main__":
-    # Local debugging of a specific gene
+    # --------------------------------------------------------------------------------------------------
+    # Local debugging of a specific homogenous gene (e.coli or bacillus)
     # with open(r"C:\projects\Igem_TAU_2021_moran\analysis\example_data\Bacillus-subtilis.fasta", "r") as fasta_handle:
     #     genome_dict = SeqIO.to_dict(SeqIO.parse(fasta_handle, "fasta"), lambda r: r.description)
     # gene_name = "thrA|fused aspartate kinase/homoserine dehydrogenase 1"
     #
     # gene_sequence = genome_dict[gene_name]
     # gene_sequence = str(gene_sequence.seq)
-
-
+    # --------------------------------------------------------------------------------------------------
     # Local debugging of arabidopsis run
-    zora_gene = os.path.join(base_path, "zorA_anti_phage_defense.fasta")
-    results = run_single_method_arabidopsis(
-        optimization_method="single_codon_diff",
-        optimization_cub_index="CAI",
-        wanted_hosts=["Arthrobacter_parietis.gbff"],
-        unwanted_hosts=["Arthrobacter_ginsengisoli.gbff"],
-        orf_sequence_file=zora_gene,
-    )
-
+    # zora_gene = os.path.join(base_path, "zorA_anti_phage_defense.fasta")
+    # results = run_single_method_arabidopsis(
+    #     optimization_method="single_codon_diff",
+    #     optimization_cub_index="CAI",
+    #     wanted_hosts=["Arthrobacter_parietis.gbff"],
+    #     unwanted_hosts=["Arthrobacter_ginsengisoli.gbff"],
+    #     orf_sequence_file=zora_gene,
+    # )
+    # --------------------------------------------------------------------------------------------------
     # Local debugging of mcherry variants
     # initiation_type = "external"
     # results = run_single_method_ecoli_and_bacillus(
@@ -262,4 +262,15 @@ if __name__ == "__main__":
     #     initiation_optimization_method=initiation_type,
     #     # orf_sequence="",
     # )
-    # print("Final seq: " + results["final_evaluation"]["final_sequence"])
+    # --------------------------------------------------------------------------------------------------
+    # Local debugging of a specific coding sequence
+    gene_sequence = "CTTGCAGTTGGACTTCCCAGGCCGACAGTGGTCTGGCTTCTGAGGGGTCAG"
+    results = run_single_method_ecoli_and_bacillus(
+        optimization_method="zscore_bulk_aa_ratio",
+        optimization_cub_index="CAI",
+        is_ecoli_optimized=True,
+        output_path=f"debug",
+        orf_sequence=gene_sequence,
+        tuning_param=0.5,
+    )
+    print("Final seq: " + results["final_evaluation"]["final_sequence"])

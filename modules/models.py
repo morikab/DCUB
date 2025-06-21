@@ -193,10 +193,16 @@ class SequenceZscores:
     normalized_unwanted_hosts_scores: typing.Optional[typing.List[float]] = None
 
     def normalize(self, min_zscore: float, max_zscore: float) -> None:
-        self.normalized_wanted_hosts_scores = [(score - min_zscore) / (max_zscore - min_zscore) + 1 for score in
-                                               self.wanted_hosts_scores]
-        self.normalized_unwanted_hosts_scores = [(score - min_zscore) / (max_zscore - min_zscore) + 1 for score in
-                                                 self.unwanted_hosts_scores]
+        epsilon = 1e-6
+
+        self.normalized_wanted_hosts_scores = [
+            (score - min_zscore + epsilon) / (max_zscore - min_zscore + epsilon) for
+            score in self.wanted_hosts_scores
+        ]
+        self.normalized_unwanted_hosts_scores = [
+            (score - min_zscore + epsilon) / (max_zscore - min_zscore + epsilon) for
+            score in self.unwanted_hosts_scores
+        ]
         self.min_score_for_normalization = min_zscore
         self.max_score_for_normalization = max_zscore
 
@@ -215,3 +221,7 @@ class SequenceZscores:
     @property
     def unwanted_hosts_scores(self) -> typing.List[float]:
         return self.normalized_unwanted_hosts_scores or self.initial_unwanted_hosts_scores
+
+    @property
+    def all_scores(self) -> list[float]:
+        return self.wanted_hosts_scores + self.unwanted_hosts_scores

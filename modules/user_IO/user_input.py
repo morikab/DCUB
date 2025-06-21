@@ -54,7 +54,6 @@ class UserInputModule(object):
         output_path = module_input.get("output_path")
 
         orf_sequence = cls._parse_orf_sequence(module_input)
-        logger.info(F"Open reading frame sequence for optimization is:\n{orf_sequence}")
 
         organisms_list = cls._parse_organisms_list(organisms_input_list=module_input["organisms"],
                                                    optimization_cub_index=orf_optimization_cub_index,
