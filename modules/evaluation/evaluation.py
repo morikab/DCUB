@@ -1,5 +1,6 @@
 import typing
 
+import numpy as np
 from numpy import average
 from scipy.stats.mstats import gmean
 
@@ -37,7 +38,7 @@ class EvaluationModule(object):
         # Consider only relevant part of the initial and final sequences
         initial_sequence_for_evaluation = initial_sequence[skipped_codons_num * 3:]
         final_sequence_for_evaluation = final_sequence[skipped_codons_num * 3:]
-        logger.info(f"Calculating evaluation score based on initial sequence: {initial_sequence_for_evaluation} and"
+        logger.info(f"Calculating evaluation score based on initial sequence: {initial_sequence_for_evaluation} and "
                     f"final sequence: {final_sequence_for_evaluation}")
 
         organisms_evaluation_summary = []
@@ -166,16 +167,17 @@ class EvaluationModule(object):
                                optimized_organisms_weights: typing.Sequence[float],
                                deoptimized_organisms_weights: typing.Sequence[float],
                                tuning_parameter: float) -> float:
-        all_scores = [*scores_for_normalization, *optimized_organisms_scores, *deoptimized_organisms_scores]
-        min_score = min(all_scores)
-        max_score = max(all_scores)
-        scores_range = max_score-min_score
-
+        all_scores = np.array([*scores_for_normalization, *optimized_organisms_scores, *deoptimized_organisms_scores])
+        min_score = all_scores.min()
+        max_score = all_scores.max()
+        epsilon = 1e-6
         normalized_optimized_organisms_scores = [
-            (score - min_score)/scores_range + 1 for score in optimized_organisms_scores
+            (score - min_score + epsilon) / (max_score - min_score + epsilon) for
+            score in optimized_organisms_scores
         ]
         normalized_deoptimized_organisms_scores = [
-            (score - min_score)/scores_range + 1 for score in deoptimized_organisms_scores
+            (score - min_score + epsilon) / (max_score - min_score + epsilon) for
+            score in deoptimized_organisms_scores
         ]
         mean_opt_index = gmean(normalized_optimized_organisms_scores, weights=optimized_organisms_weights)
         mean_deopt_index = gmean(normalized_deoptimized_organisms_scores, weights=deoptimized_organisms_weights)

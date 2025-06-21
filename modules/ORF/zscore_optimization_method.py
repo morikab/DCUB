@@ -1,7 +1,10 @@
+import statistics
 import typing
 from collections import defaultdict
 
+import numpy as np
 from numpy import average
+from scipy.spatial.distance import pdist
 from scipy.stats.mstats import gmean
 
 from logger_factory.logger_factory import LoggerFactory
@@ -239,8 +242,14 @@ def optimize_sequence_by_zscore_bulk_aa(
                     skipped_codons_num=skipped_codons_num,
                 )
             if optimization_method.is_zscore_ratio_score_optimization:
-                min_zscore = min(score.min_zscore for score in codons_to_zscore.values())
-                max_zscore = max(score.max_zscore for score in codons_to_zscore.values())
+                all_scores = np.array(
+                    [pt for zscore in codons_to_zscore.values() for pt in zscore.all_scores]
+                ).reshape(-1, 1)
+                min_zscore = all_scores.min()
+                max_zscore = all_scores.max()
+                # TODO - think if we want to do something with these kind of values
+                # distances = pdist(all_scores, metric="euclidean")
+                # min_dist = distances[distances!=0].min()
 
                 for zscore in codons_to_zscore.values():
                     zscore.normalize(min_zscore=min_zscore, max_zscore=max_zscore)
