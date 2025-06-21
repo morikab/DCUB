@@ -139,16 +139,19 @@ def extract_cds(cds_features: typing.List, sequence: Seq) -> typing.Sequence[mod
 
 
 def extract_gene_data(genbank_path: str):
-    gb_file = SeqIO.read(genbank_path, format="gb")
-    if any(not is_known_location_type(x) for x in gb_file.features):
-        raise RuntimeError(f"Unknown location type found in {genbank_path}")
+    gb_records = SeqIO.parse(genbank_path, format="genbank")
+    all_cds = []
+    for record in gb_records:
+        if any(not is_known_location_type(x) for x in record.features):
+            raise RuntimeError(f"Unknown location type found in {genbank_path}")
 
-    genome = gb_file.seq
+        genome = record.seq
 
-    cds_features: typing.List[SeqFeature] = [
-        x for x in gb_file.features if x.type == "CDS" and does_have_only_exact_positions(x)
-    ]
-    return extract_cds(cds_features, genome)
+        cds_features: typing.List[SeqFeature] = [
+            x for x in record.features if x.type == "CDS" and does_have_only_exact_positions(x)
+        ]
+        all_cds.extend(extract_cds(cds_features, genome))
+    return all_cds
 
 
 def extract_gene_expression(
@@ -186,7 +189,7 @@ def extract_gene_expression(
 
 def get_reference_genes_for_cai(
         cds_dict: typing.Dict[str, typing.Any],
-        estimated_expression_dict: typing.Dict[str, float],
+        estimated_expression_dict: typing.Optional[typing.Dict[str, float]] = None,
 ) -> typing.Dict[str, str]:
     """
     calculates the cai weights - if estimated_expression dictionary has more than 3 times the number of ribosomal genes,
@@ -197,7 +200,7 @@ def get_reference_genes_for_cai(
     ribosomal_proteins = {description: cds for description, cds in cds_dict.items() if "ribosom" in description}
     ribosomal_proteins_count = len(ribosomal_proteins)
     logger.info(F"Found {ribosomal_proteins_count} ribosomal proteins in input genome.")
-
+    estimated_expression_dict = estimated_expression_dict or {}
     if len(estimated_expression_dict) < max(ribosomal_proteins_count, ribosomal_proteins_count_threshold) * 3:
         logger.info("Estimated expression dictionary does not have enough expression levels. CAI will be calculated "
                     "from a reference set of ribosomal proteins or the entire genome.")

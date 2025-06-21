@@ -65,13 +65,15 @@ def generate_testing_data(
         sequence: str = None,
         output_path: str = None,
         initiation_optimization_method: str = None,
+        evaluation_score: str = None,
 ) -> typing.Dict[str, typing.Any]:
     assert (sequence is not None or sequence_file_path is not None), \
         "Should provide either a sequence or a sequence file path"
-
+    assert output_path is not None, "should provide an output path"
     output_path = os.path.join("results", output_path)
+    initiation_optimization_method = initiation_optimization_method or "original"
     output_directory = os.path.join(output_path, F"{orf_optimization_cub_index}_{orf_optimization_method}_"
-                                                 F"{len(wanted_hosts) + len(unwanted_hosts)}_"
+                                                 F"wanted_{len(wanted_hosts)}_unwanted_{len(unwanted_hosts)}_"
                                                  F"{generate_random_string(4)}")
     # Path(output_directory).mkdir(parents=True, exist_ok=True)
     input_dict = {
@@ -82,6 +84,7 @@ def generate_testing_data(
         "orf_optimization_method": orf_optimization_method,
         "orf_optimization_cub_index": orf_optimization_cub_index,
         "initiation_optimization_method": initiation_optimization_method,
+        "evaluation_score": evaluation_score or "average_distance",
         "output_path": output_directory,
         "organisms": {},
     }
