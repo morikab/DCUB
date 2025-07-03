@@ -266,7 +266,7 @@ if __name__ == "__main__":
     # Local debugging of a specific coding sequence
     gene_sequence = "CTTGCAGTTGGACTTCCCAGGCCGACAGTGGTCTGGCTTCTGAGGGGTCAG"
     results = run_single_method_ecoli_and_bacillus(
-        optimization_method="zscore_bulk_aa_ratio",
+        optimization_method="single_wanted_organism", # "zscore_bulk_aa_ratio"
         optimization_cub_index="CAI",
         is_ecoli_optimized=True,
         output_path=f"debug",

@@ -90,7 +90,7 @@ class ORFOptimizationMethod(Enum):
     zscore_bulk_aa_diff = "zscore_bulk_aa_diff"
     zscore_single_aa_weakest_link = "zscore_single_aa_weakest_link"
     zscore_bulk_aa_weakest_link = "zscore_bulk_aa_weakest_link"
-    single_organism = "single_wanted_organism"
+    single_wanted_organism = "single_wanted_organism"
 
     @property
     def is_single_codon_optimization(self) -> bool:
@@ -126,6 +126,10 @@ class ORFOptimizationMethod(Enum):
     @property
     def is_zscore_diff_score_optimization(self) -> bool:
         return self in (ORFOptimizationMethod.zscore_single_aa_diff, ORFOptimizationMethod.zscore_bulk_aa_diff)
+
+    @property
+    def is_single_organism_optimization(self) -> bool:
+        return self == ORFOptimizationMethod.single_wanted_organism
 
 
 class InitiationOptimizationMethod(Enum):
