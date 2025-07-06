@@ -9,6 +9,7 @@ from modules.shared_functions_and_vars import synonymous_codon_permutation
 from modules.shared_functions_and_vars import validate_module_output
 
 from .single_codon_optimization_method import optimize_sequence as optimize_sequence_by_single_codon
+from .single_organism_optimization_method import optimize_sequence as optimize_sequence_for_single_organism
 from .zscore_optimization_method import optimize_sequence_by_zscore_single_aa
 from .zscore_optimization_method import optimize_sequence_by_zscore_bulk_aa
 
@@ -51,6 +52,18 @@ class ORFModule(object):
                 skipped_codons_num=skipped_codons_num,
                 run_summary=run_summary,
             )
+
+        if optimization_method.is_single_organism_optimization:
+            result = optimize_sequence_for_single_organism(
+                target_gene=module_input.sequence,
+                organisms=module_input.organisms,
+                optimization_method=optimization_method,
+                optimization_cub_index=optimization_cub_index,
+                skipped_codons_num=skipped_codons_num,
+                run_summary=run_summary,
+            )
+            validate_module_output(original_sequence=module_input.sequence, new_sequence=result)
+            return [result]
 
         raise ValueError(F"optimization method {optimization_method} is invalid")
 
