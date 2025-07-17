@@ -45,12 +45,12 @@ class LoggerFactory(object):
         # -------------
         # Make sure logs directory exists
         # FIXME
-        # Path(cls.LOG_DIRECTORY).mkdir(parents=True, exist_ok=True)
-        # # Generate log file
-        # log_file_path = os.path.join(cls.LOG_DIRECTORY, cls.LOG_FILE_NAME)
-        # log_file_handler = logging.FileHandler(log_file_path, mode="w")
-        # log_file_handler.setFormatter(logging.Formatter(log_format))
-        # logger.addHandler(log_file_handler)
+        Path(cls.LOG_DIRECTORY).mkdir(parents=True, exist_ok=True)
+        # Generate log file
+        log_file_path = os.path.join(cls.LOG_DIRECTORY, cls.LOG_FILE_NAME)
+        log_file_handler = logging.FileHandler(log_file_path, mode="w")
+        log_file_handler.setFormatter(logging.Formatter(log_format))
+        logger.addHandler(log_file_handler)
         return logger
 
     @staticmethod
