@@ -1,0 +1,38 @@
+{
+  "name": "dna-sequence-optimizer-electron",
+  "version": "1.0.0",
+  "description": "DNA Sequence Optimizer Desktop Application",
+  "main": "main.js",
+  "scripts": {
+    "electron": "electron .",
+    "electron-dev": "NODE_ENV=development electron .",
+    "build-electron": "electron-builder",
+    "dist": "npm run build && electron-builder",
+    "pack": "electron-builder --dir"
+  },
+  "build": {
+    "appId": "com.dnaoptimizer.app",
+    "productName": "DNA Sequence Optimizer",
+    "directories": {
+      "output": "dist"
+    },
+    "files": ["main.js", "preload.js", "../out/**/*", "assets/**/*"],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "dependencies": {
+    "electron": "^27.0.0",
+    "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "electron-builder": "^24.6.4"
+  }
+}
