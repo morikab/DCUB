@@ -78,6 +78,7 @@ export function DnaSequenceInput() {
         setUploadProgress(0)
       }, 500)
     } catch (error) {
+      console.error("Validation error: ", error)
       setValidationError("Error reading file. Please try again.")
       setIsUploading(false)
       setUploadProgress(0)

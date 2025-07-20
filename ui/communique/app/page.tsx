@@ -35,7 +35,11 @@ export default function DNAOptimizerPage() {
 
       if (!validation.isValid) {
         setSubmitStatus("error")
-        setSubmitMessage(validation.errors.join(", "))
+        if (validation.errors) {
+          setSubmitMessage(validation.errors.join(", "))
+        } else {
+          setSubmitMessage("Invalid submission data")
+        }
         return
       }
 

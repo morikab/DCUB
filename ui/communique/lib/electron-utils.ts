@@ -1,15 +1,19 @@
 export const isElectron = (): boolean => {
-  return typeof window !== "undefined" && window.process && window.process.type === "renderer"
+   // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return typeof window !== "undefined" && window.process && (window.process as any).type === "renderer"
 }
 
 export const getElectronAPI = () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   if (typeof window !== "undefined" && (window as any).electronAPI) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return (window as any).electronAPI
   }
   return null
 }
 
 // Helper to handle file operations in Electron
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const handleElectronFileOperation = async (operation: string, data?: any) => {
   const electronAPI = getElectronAPI()
   if (electronAPI && electronAPI.fileOperations) {
