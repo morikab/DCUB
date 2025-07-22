@@ -2,6 +2,8 @@ import json
 import os
 import typing
 
+from pathlib import Path
+
 
 class RunSummary(object):
     def __init__(self):
@@ -24,6 +26,7 @@ class RunSummary(object):
         self._run_summary.pop(key)
 
     def save_run_summary(self, output_directory: str) -> None:
+        Path(output_directory).mkdir(parents=True, exist_ok=True)
         output_path = os.path.join(output_directory, "run_summary.json")
         with open(output_path, "w") as output_file:
             json.dump(self._run_summary, output_file)

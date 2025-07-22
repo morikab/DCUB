@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
-import { Upload, FileText, X } from "lucide-react"
+import { Upload, FileText, X, Download } from "lucide-react"
 import { useOptimizationStore } from "@/lib/store"
 import { validateFastaSequence } from "@/lib/validation"
 
@@ -39,6 +39,12 @@ export function DnaSequenceInput() {
     // Validate file type
     if (!file.name.toLowerCase().endsWith(".fasta") && !file.name.toLowerCase().endsWith(".fa")) {
       setValidationError("Please upload a FASTA file (.fasta or .fa)")
+      return
+    }
+
+    // Check file size (10MB limit)
+    if (file.size > 10 * 1024 * 1024) {
+      setValidationError("File size must be less than 10MB")
       return
     }
 
@@ -78,7 +84,6 @@ export function DnaSequenceInput() {
         setUploadProgress(0)
       }, 500)
     } catch (error) {
-      console.error("Validation error: ", error)
       setValidationError("Error reading file. Please try again.")
       setIsUploading(false)
       setUploadProgress(0)
@@ -93,6 +98,24 @@ export function DnaSequenceInput() {
     }
   }
 
+  const downloadSampleFasta = () => {
+    const sampleFasta = `>Sample DNA Sequence
+ATGAAAGTTCTGTTCCAGGGCCCGCCCGCGCCGCTGCTGCTGCTGCTGCTGCTGCTGCTG
+CTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTG
+CTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTG
+CTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGTAG`
+
+    const blob = new Blob([sampleFasta], { type: "text/plain" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "sample_sequence.fasta"
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -105,7 +128,18 @@ export function DnaSequenceInput() {
       <CardContent className="space-y-4">
         {/* Manual Input */}
         <div className="space-y-2">
-          <Label htmlFor="dna-sequence">Manual Entry (FASTA Format)</Label>
+          <div className="flex items-center justify-between">
+            <Label htmlFor="dna-sequence">Manual Entry (FASTA Format)</Label>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={downloadSampleFasta}
+              className="text-blue-600 hover:text-blue-800"
+            >
+              <Download className="w-4 h-4 mr-1" />
+              Download Sample
+            </Button>
+          </div>
           <Textarea
             id="dna-sequence"
             placeholder={`>sequence_name
@@ -172,7 +206,8 @@ ATGCGATCGATCGATCGATCG...`}
           </p>
           <ul className="list-disc list-inside mt-1 space-y-1">
             <li>Must start with a header line beginning with {">"}</li>
-            <li>Sequence should contain only valid DNA bases (A, T, G, C)</li>
+            <li>Sequence should contain only valid DNA bases (A, T, G, C, N)</li>
+            <li>IUPAC nucleotide codes are supported</li>
             <li>Multiple sequences are supported</li>
             <li>File size limit: 10MB</li>
           </ul>

@@ -35,11 +35,7 @@ export default function DNAOptimizerPage() {
 
       if (!validation.isValid) {
         setSubmitStatus("error")
-        if (validation.errors) {
-          setSubmitMessage(validation.errors.join(", "))
-        } else {
-          setSubmitMessage("Invalid submission data")
-        }
+        setSubmitMessage(validation.errors.join(", "))
         return
       }
 
@@ -98,7 +94,7 @@ export default function DNAOptimizerPage() {
 
       if (error instanceof TypeError && error.message.includes("fetch")) {
         setSubmitMessage(
-          "Unable to connect to the optimization server. Please ensure the backend is running on localhost:8000.",
+          "Unable to connect to the optimization server. Please ensure the backend is running on localhost:8000 and CORS is properly configured.",
         )
       } else {
         setSubmitMessage(`Optimization failed: ${error instanceof Error ? error.message : "Unknown error"}`)
@@ -144,13 +140,14 @@ export default function DNAOptimizerPage() {
 
       {/* Advanced Options Panel */}
       <AdvancedOptionsPanel isOpen={showAdvancedOptions} onClose={() => setShowAdvancedOptions(false)} />
+
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold text-gray-900">DNA Sequence Optimizer</h1>
+          <h1 className="text-4xl font-bold text-gray-900">Commuique</h1>
           <p className="text-lg text-gray-600 max-w-2xl mx-auto">
             Configure your DNA sequence optimization parameters by specifying target organisms, priorities, and
-            expression data for comprehensive genetic optimization.
+            expression data for comprehensive genetic optimization using GenBank genome files.
           </p>
         </div>
 
@@ -232,12 +229,12 @@ export default function DNAOptimizerPage() {
               <strong>1. DNA Sequence:</strong> Enter your sequence manually or upload a FASTA file
             </p>
             <p>
-              <strong>2. Wanted Organisms:</strong> Add organisms you want to optimize for with their genome paths and
-              priorities
+              <strong>2. Wanted Organisms:</strong> Add organisms you want to optimize for with their GenBank genome
+              files (.gb/.gbf) and priorities
             </p>
             <p>
-              <strong>3. Unwanted Organisms:</strong> Add organisms you want to avoid with their genome paths and
-              priorities
+              <strong>3. Unwanted Organisms:</strong> Add organisms you want to avoid with their GenBank genome files
+              (.gb/.gbf) and priorities
             </p>
             <p>
               <strong>4. Priority Scores:</strong> Use values between 1-100 (higher = more important)
@@ -245,6 +242,44 @@ export default function DNAOptimizerPage() {
             <p>
               <strong>5. Expression Data:</strong> Optionally provide CSV files with expression data for each organism
             </p>
+            <p>
+              <strong>6. Advanced Options:</strong> Click the settings button to configure tuning parameters and
+              optimization methods
+            </p>
+          </CardContent>
+        </Card>
+
+        {/* CORS Notice for Development */}
+        <Card className="bg-yellow-50 border-yellow-200">
+          <CardHeader>
+            <CardTitle className="text-yellow-900 text-base">Development Notice</CardTitle>
+          </CardHeader>
+          <CardContent className="text-yellow-800 text-sm">
+            <p>
+              <strong>For local development:</strong> Ensure your backend server at localhost:8000 has CORS enabled to
+              allow requests from this web application.
+            </p>
+            <p className="mt-2">
+              <strong>GenBank Files:</strong> Genome files must be in GenBank format (.gb or .gbf extensions).
+            </p>
+            <p className="mt-2">
+              <strong>Backend CORS configuration example:</strong>
+            </p>
+            <pre className="mt-2 p-2 bg-yellow-100 rounded text-xs overflow-x-auto">
+              {`# Python Flask example
+from flask_cors import CORS
+app = Flask(__name__)
+CORS(app, origins=["http://localhost:3000"])
+
+# Python FastAPI example  
+from fastapi.middleware.cors import CORSMiddleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_methods=["POST"],
+    allow_headers=["*"],
+)`}
+            </pre>
           </CardContent>
         </Card>
       </div>

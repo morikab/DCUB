@@ -30,11 +30,29 @@ export function validateFastaSequence(sequence: string): ValidationResult {
   return { isValid: true }
 }
 
+export function validateGenBankPath(genomePath: string): ValidationResult {
+  if (!genomePath.trim()) {
+    return { isValid: false, error: "GenBank genome file path is required" }
+  }
+
+  const path = genomePath.trim().toLowerCase()
+  if (!path.endsWith(".gb") && !path.endsWith(".gbf")) {
+    return {
+      isValid: false,
+      error: "Genome file must be in GenBank format (.gb or .gbf extension)",
+    }
+  }
+
+  return { isValid: true }
+}
+
 export function validateOrganism(genomePath: string, priority: number): ValidationResult {
   const errors: string[] = []
 
-  if (!genomePath.trim()) {
-    errors.push("Genome file path is required")
+  // Validate GenBank file path
+  const pathValidation = validateGenBankPath(genomePath)
+  if (!pathValidation.isValid) {
+    errors.push(pathValidation.error!)
   }
 
   if (priority < 1 || priority > 100) {

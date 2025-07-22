@@ -1,14 +1,12 @@
 "use client"
 
-import type React from "react"
-
 import { useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Trash2, Upload } from "lucide-react"
+import { Plus, Trash2, Download } from "lucide-react"
 import { useOptimizationStore } from "@/lib/store"
 import type { Organism } from "@/lib/types"
 
@@ -64,20 +62,23 @@ export function OrganismList({ type }: OrganismListProps) {
     })
   }
 
-  const handleFileUpload = async (organismId: string, fileType: "genome" | "expression", file: File) => {
-    // In a real application, you would upload the file to a server
-    // For now, we'll just store the file path/name
-    const filePath = `/uploads/${file.name}`
+  const downloadSampleCSV = () => {
+    const sampleCSV = `gene_id,expression_level,tpm,fpkm
+gene_001,1250.5,45.2,32.1
+gene_002,890.3,28.7,21.4
+gene_003,2100.8,67.9,48.3
+gene_004,456.2,15.8,11.2
+gene_005,1780.4,58.1,41.7`
 
-    const organism = organisms.find((org) => org.id === organismId)
-    if (!organism) return
-
-    const updatedOrganism = {
-      ...organism,
-      [fileType === "genome" ? "genomePath" : "expressionDataPath"]: filePath,
-    }
-
-    updateOrganism(organismId, updatedOrganism)
+    const blob = new Blob([sampleCSV], { type: "text/csv" })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement("a")
+    a.href = url
+    a.download = "sample_expression_data.csv"
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
   }
 
   return (
@@ -102,7 +103,6 @@ export function OrganismList({ type }: OrganismListProps) {
             organism={organism}
             onUpdate={(updated) => updateOrganism(organism.id, updated)}
             onRemove={() => removeOrganism(organism.id)}
-            onFileUpload={(fileType, file) => handleFileUpload(organism.id, fileType, file)}
           />
         ))}
       </div>
@@ -118,10 +118,10 @@ export function OrganismList({ type }: OrganismListProps) {
         <CardContent className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="genome-path">Genome File Path *</Label>
+              <Label htmlFor="genome-path">GenBank Genome File Path (.gb/.gbf) *</Label>
               <Input
                 id="genome-path"
-                placeholder="/path/to/genome.fasta"
+                placeholder="/path/to/genome.gb"
                 value={newOrganism.genomePath || ""}
                 onChange={(e) => setNewOrganism((prev) => ({ ...prev, genomePath: e.target.value }))}
               />
@@ -145,7 +145,18 @@ export function OrganismList({ type }: OrganismListProps) {
             </div>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="expression-path">Expression Data CSV Path (Optional)</Label>
+            <div className="flex items-center justify-between">
+              <Label htmlFor="expression-path">Expression Data CSV Path (Optional)</Label>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={downloadSampleCSV}
+                className="text-blue-600 hover:text-blue-800"
+              >
+                <Download className="w-4 h-4 mr-1" />
+                Sample CSV
+              </Button>
+            </div>
             <Input
               id="expression-path"
               placeholder="/path/to/expression_data.csv"
@@ -167,17 +178,9 @@ interface OrganismCardProps {
   organism: Organism
   onUpdate: (organism: Organism) => void
   onRemove: () => void
-  onFileUpload: (fileType: "genome" | "expression", file: File) => void
 }
 
-function OrganismCard({ organism, onUpdate, onRemove, onFileUpload }: OrganismCardProps) {
-  const handleFileChange = (fileType: "genome" | "expression") => (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (file) {
-      onFileUpload(fileType, file)
-    }
-  }
-
+function OrganismCard({ organism, onUpdate, onRemove }: OrganismCardProps) {
   return (
     <Card>
       <CardContent className="pt-6">
@@ -194,28 +197,12 @@ function OrganismCard({ organism, onUpdate, onRemove, onFileUpload }: OrganismCa
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div className="space-y-2">
-            <Label>Genome File Path</Label>
-            <div className="flex gap-2">
-              <Input
-                value={organism.genomePath}
-                onChange={(e) => onUpdate({ ...organism, genomePath: e.target.value })}
-                placeholder="/path/to/genome.fasta"
-              />
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => document.getElementById(`genome-${organism.id}`)?.click()}
-              >
-                <Upload className="w-4 h-4" />
-              </Button>
-              <input
-                id={`genome-${organism.id}`}
-                type="file"
-                accept=".fasta,.fa,.gbk,.gb"
-                onChange={handleFileChange("genome")}
-                className="hidden"
-              />
-            </div>
+            <Label>GenBank Genome File Path (.gb/.gbf)</Label>
+            <Input
+              value={organism.genomePath}
+              onChange={(e) => onUpdate({ ...organism, genomePath: e.target.value })}
+              placeholder="/path/to/genome.gb"
+            />
           </div>
 
           <div className="space-y-2">
@@ -237,32 +224,16 @@ function OrganismCard({ organism, onUpdate, onRemove, onFileUpload }: OrganismCa
 
         <div className="mt-4 space-y-2">
           <Label>Expression Data CSV (Optional)</Label>
-          <div className="flex gap-2">
-            <Input
-              value={organism.expressionDataPath || ""}
-              onChange={(e) =>
-                onUpdate({
-                  ...organism,
-                  expressionDataPath: e.target.value || undefined,
-                })
-              }
-              placeholder="/path/to/expression_data.csv"
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => document.getElementById(`expression-${organism.id}`)?.click()}
-            >
-              <Upload className="w-4 h-4" />
-            </Button>
-            <input
-              id={`expression-${organism.id}`}
-              type="file"
-              accept=".csv"
-              onChange={handleFileChange("expression")}
-              className="hidden"
-            />
-          </div>
+          <Input
+            value={organism.expressionDataPath || ""}
+            onChange={(e) =>
+              onUpdate({
+                ...organism,
+                expressionDataPath: e.target.value || undefined,
+              })
+            }
+            placeholder="/path/to/expression_data.csv"
+          />
         </div>
       </CardContent>
     </Card>

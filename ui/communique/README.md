@@ -1,36 +1,87 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Commuique
+
+A DNA sequence optimization tool that uses GenBank genome files to configure optimization parameters for target organisms.
+
+## Features
+
+- **DNA Sequence Input**: Manual FASTA entry or file upload
+- **Organism Configuration**: Add wanted and unwanted organisms with GenBank genome files (.gb/.gbf)
+- **Priority System**: Set optimization priorities (1-100) for each organism
+- **Expression Data**: Optional CSV files with expression data
+- **Advanced Options**: Tuning parameters, optimization methods, and CUB index selection
+- **Backend Integration**: POST requests to localhost:8000/run_modules endpoint
 
 ## Getting Started
 
-First, run the development server:
+1. Install dependencies:
+\`\`\`bash
+npm install
+\`\`\`
 
-```bash
+2. Run the development server:
+\`\`\`bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
-```
+\`\`\`
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+3. Open [http://localhost:3000](http://localhost:3000) in your browser.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## GenBank File Requirements
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+- Genome files must be in GenBank format (.gb or .gbf extensions)
+- Files should contain complete genome sequences with annotations
+- Both wanted and unwanted organisms require GenBank genome files
 
-## Learn More
+## API Endpoint
 
-To learn more about Next.js, take a look at the following resources:
+The application sends POST requests to:
+\`\`\`
+http://localhost:8000/run_modules
+\`\`\`
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+### Request Format
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+\`\`\`json
+{
+  "dna_sequence": {
+    "content": "ATGCGATCG...",
+    "file_name": "sequence.fasta",
+    "file_content": "base64_encoded_content"
+  },
+  "wanted_organisms": [
+    {
+      "id": "unique_id",
+      "genome_path": "/path/to/genome.gb",
+      "priority": 75,
+      "expression_data_path": "/path/to/expression.csv"
+    }
+  ],
+  "unwanted_organisms": [
+    {
+      "id": "unique_id", 
+      "genome_path": "/path/to/genome.gb",
+      "priority": 25,
+      "expression_data_path": null
+    }
+  ],
+  "advanced_options": {
+    "tuning_parameter": 50,
+    "optimization_method": "single_codon_diff",
+    "cub_index": "CAI"
+  },
+  "timestamp": "2024-01-20T10:30:00.000Z"
+}
+\`\`\`
 
-## Deploy on Vercel
+## Development
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Make sure your backend server has CORS enabled for localhost:3000 during development.
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Build
+
+\`\`\`bash
+npm run build
+\`\`\`
+
+## License
+
+MIT
