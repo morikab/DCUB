@@ -11,18 +11,25 @@ import { DnaSequenceInput } from "@/components/dna-sequence-input"
 import { OrganismList } from "@/components/organism-list"
 import { validateSubmission } from "@/lib/validation"
 import { AdvancedOptionsPanel } from "@/components/advanced-options-panel"
+import { LoadingScreen } from "@/components/loading-screen"
+import { ResultsScreen } from "@/components/results-screen"
+import type { OptimizationResult } from "@/lib/types"
 
 export default function DNAOptimizerPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [submitStatus, setSubmitStatus] = useState<"idle" | "success" | "error">("idle")
   const [submitMessage, setSubmitMessage] = useState("")
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
+  const [optimizationResult, setOptimizationResult] = useState<OptimizationResult | null>(null)
+  const [showResults, setShowResults] = useState(false)
 
   const { dnaSequence, sequenceFile, wantedOrganisms, unwantedOrganisms, reset } = useOptimizationStore()
 
   const handleSubmit = async () => {
     setIsSubmitting(true)
     setSubmitStatus("idle")
+    setOptimizationResult(null)
+    setShowResults(false)
 
     try {
       // Validate all inputs
@@ -68,15 +75,21 @@ export default function DNAOptimizerPage() {
 
       console.log("Sending optimization request:", optimizationPayload)
 
-      // Send POST request to backend
-      const response = await fetch("http://localhost:8000/run_modules", {
+      // Send POST request to backend with extended timeout
+      const controller = new AbortController()
+      const timeoutId = setTimeout(() => controller.abort(), 300000) // 5 minute timeout
+
+      const response = await fetch("http://localhost:8000/run-modules", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
         body: JSON.stringify(optimizationPayload),
+        signal: controller.signal,
       })
+
+      clearTimeout(timeoutId)
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: "Unknown error" }))
@@ -86,13 +99,19 @@ export default function DNAOptimizerPage() {
       const result = await response.json()
       console.log("Optimization result:", result)
 
+      // Parse and validate the response
+      const parsedResult = parseOptimizationResponse(result)
+      setOptimizationResult(parsedResult)
+      setShowResults(true)
       setSubmitStatus("success")
-      setSubmitMessage("DNA optimization completed successfully! Check the console for detailed results.")
+      setSubmitMessage("DNA optimization completed successfully!")
     } catch (error) {
       console.error("Optimization error:", error)
       setSubmitStatus("error")
 
-      if (error instanceof TypeError && error.message.includes("fetch")) {
+      if (error instanceof Error && error.name === "AbortError") {
+        setSubmitMessage("Request timed out. The optimization process took too long to complete.")
+      } else if (error instanceof TypeError && error.message.includes("fetch")) {
         setSubmitMessage(
           "Unable to connect to the optimization server. Please ensure the backend is running on localhost:8000 and CORS is properly configured.",
         )
@@ -101,6 +120,31 @@ export default function DNAOptimizerPage() {
       }
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  // Helper function to parse optimization response
+  const parseOptimizationResponse = (response: any): OptimizationResult => {
+    try {
+      return {
+        optimized_sequence: response.optimized_sequence || response.sequence || "",
+        evaluation_scores: {
+          cai_score: response.evaluation_scores?.cai_score || response.cai_score || 0,
+          gc_content: response.evaluation_scores?.gc_content || response.gc_content || 0,
+          codon_usage_bias: response.evaluation_scores?.codon_usage_bias || response.codon_usage_bias || 0,
+        },
+        original_sequence: response.original_sequence || dnaSequence || sequenceFile?.name || "",
+        optimization_parameters: {
+          tuning_parameter: useOptimizationStore.getState().tuningParameter,
+          optimization_method: useOptimizationStore.getState().optimizationMethod,
+          cub_index: useOptimizationStore.getState().cubIndex,
+        },
+        processing_time: response.processing_time || 0,
+        timestamp: response.timestamp || new Date().toISOString(),
+      }
+    } catch (error) {
+      console.error("Error parsing response:", error)
+      throw new Error("Invalid response format from server")
     }
   }
 
@@ -123,6 +167,25 @@ export default function DNAOptimizerPage() {
     reset()
     setSubmitStatus("idle")
     setSubmitMessage("")
+    setOptimizationResult(null)
+    setShowResults(false)
+  }
+
+  const handleBackToForm = () => {
+    setShowResults(false)
+    setOptimizationResult(null)
+    setSubmitStatus("idle")
+    setSubmitMessage("")
+  }
+
+  // Show loading screen while processing
+  if (isSubmitting) {
+    return <LoadingScreen />
+  }
+
+  // Show results screen after successful optimization
+  if (showResults && optimizationResult) {
+    return <ResultsScreen result={optimizationResult} onBackToForm={handleBackToForm} onReset={handleReset} />
   }
 
   return (
@@ -263,23 +326,9 @@ export default function DNAOptimizerPage() {
               <strong>GenBank Files:</strong> Genome files must be in GenBank format (.gb or .gbf extensions).
             </p>
             <p className="mt-2">
-              <strong>Backend CORS configuration example:</strong>
+              <strong>Processing Time:</strong> Optimization can take several minutes to complete. Please be patient
+              while the server processes your request.
             </p>
-            <pre className="mt-2 p-2 bg-yellow-100 rounded text-xs overflow-x-auto">
-              {`# Python Flask example
-from flask_cors import CORS
-app = Flask(__name__)
-CORS(app, origins=["http://localhost:3000"])
-
-# Python FastAPI example  
-from fastapi.middleware.cors import CORSMiddleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["http://localhost:3000"],
-    allow_methods=["POST"],
-    allow_headers=["*"],
-)`}
-            </pre>
           </CardContent>
         </Card>
       </div>

@@ -99,7 +99,7 @@ export function DnaSequenceInput() {
   }
 
   const downloadSampleFasta = () => {
-    const sampleFasta = `>Sample DNA Sequence
+    const sampleFasta = `>Sample DNA Sequence for Commuique Optimization
 ATGAAAGTTCTGTTCCAGGGCCCGCCCGCGCCGCTGCTGCTGCTGCTGCTGCTGCTGCTG
 CTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTG
 CTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTG
@@ -175,6 +175,7 @@ ATGCGATCGATCGATCGATCG...`}
                   onClick={() => fileInputRef.current?.click()}
                   disabled={isUploading || !!dnaSequence.trim()}
                 >
+                  <Upload className="w-4 h-4 mr-2" />
                   Choose File
                 </Button>
               </>
