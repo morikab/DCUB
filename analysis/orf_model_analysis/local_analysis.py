@@ -267,7 +267,7 @@ if __name__ == "__main__":
     gene_sequence = "CTTGCAGTTGGACTTCCCAGGCCGACAGTGGTCTGGCTTCTGAGGGGTCAG"
     results = run_single_method_ecoli_and_bacillus(
         optimization_method="single_wanted_organism", # "zscore_bulk_aa_ratio"
-        optimization_cub_index="CAI",
+        optimization_cub_index="tAI",       # CAI
         is_ecoli_optimized=True,
         output_path=f"debug",
         orf_sequence=gene_sequence,
