@@ -19,6 +19,7 @@ interface OrganismListProps {
 
 export function OrganismList({ type }: OrganismListProps) {
   const [newOrganism, setNewOrganism] = useState<Partial<Organism>>({
+    name: "", // Add name field
     genomePath: "",
     priority: undefined,
     expressionDataPath: "",
@@ -48,10 +49,11 @@ export function OrganismList({ type }: OrganismListProps) {
   }
 
   const handleAddOrganism = () => {
-    if (!newOrganism.genomePath?.trim()) return
+    if (!newOrganism.genomePath?.trim() || !newOrganism.name?.trim()) return
 
     const organism: Organism = {
       id: Date.now().toString(),
+      name: newOrganism.name.trim(),
       genomePath: newOrganism.genomePath.trim(),
       priority: newOrganism.priority || calculateDefaultPriority(),
       expressionDataPath: newOrganism.expressionDataPath?.trim() || undefined,
@@ -59,6 +61,7 @@ export function OrganismList({ type }: OrganismListProps) {
 
     addOrganism(organism)
     setNewOrganism({
+      name: "",
       genomePath: "",
       priority: undefined,
       expressionDataPath: "",
@@ -108,8 +111,8 @@ ORIGIN
         1 atgaaacagc ataaagcaat gattgtcgct ttgattgtga tttgtattac tgctgttgtt
        61 gctgctttgg ttactcgtaa agatctttgt gaagtgcata ttcgtactgg tcagactgaa
       121 gtggctgtat tttagatcga tgcacgtatt ggtcagattt tgcgtgaagt tgctggtgaa
-      181 cgtggtgaag ttgctggtga acgtggtgaa gttgctggtg aacgtggtga agttgctggt
-      241 gaacgtggtg aagttgctgg tgaacgtggt gaagttgctg gtgaacgtgg tgaagttgct
+      181 cgtggtgaag ttgctggtga acgtggtgaag ttgctggtg aacgtggtga agttgctggt
+      241 gaacgtggtg aagttgctgg tgaacgtggtgaa gttgctggtg aacgtgg tgaagttgct
       301 ggtgaacgtg gtgaagttgc tggtgaacgt ggtgaagttg ctggtgaacg tggtgaagtt
       361 gctggtgaac gtggtgaagt tgctggtgaa cgtggtgaag ttgctggtga acgtggtgaa
       421 gttgctggtg aacgtggtga agttgctggt gaacgtggtg aagttgctgg tgaacgtggt
@@ -170,6 +173,15 @@ ORIGIN
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="space-y-2 mb-4">
+            <Label htmlFor="organism-name">Organism Name *</Label>
+            <Input
+              id="organism-name"
+              placeholder="e.g., Escherichia-coli, Bacillus-subtilis"
+              value={newOrganism.name || ""}
+              onChange={(e) => setNewOrganism((prev) => ({ ...prev, name: e.target.value }))}
+            />
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
@@ -233,7 +245,11 @@ ORIGIN
               fileType="CSV"
             />
           </div>
-          <Button onClick={handleAddOrganism} disabled={!newOrganism.genomePath?.trim()} className="w-full">
+          <Button
+            onClick={handleAddOrganism}
+            disabled={!newOrganism.genomePath?.trim() || !newOrganism.name?.trim()}
+            className="w-full"
+          >
             <Plus className="w-4 h-4 mr-2" />
             Add Organism
           </Button>
@@ -250,12 +266,20 @@ interface OrganismCardProps {
 }
 
 function OrganismCard({ organism, onUpdate, onRemove }: OrganismCardProps) {
+  const getDisplayPath = (fullPath: string) => {
+    if (!fullPath) return ""
+    return fullPath.split("/").pop() || fullPath
+  }
+
   return (
     <Card>
       <CardContent className="pt-6">
         <div className="flex items-start justify-between mb-4">
           <div className="flex-1">
             <div className="flex items-center gap-2 mb-2">
+              <Badge variant="secondary" className="font-medium">
+                {organism.name}
+              </Badge>
               <Badge variant="outline">Priority: {organism.priority}</Badge>
               <Button variant="ghost" size="sm" onClick={onRemove} className="text-red-500 hover:text-red-700">
                 <Trash2 className="w-4 h-4" />
@@ -264,49 +288,63 @@ function OrganismCard({ organism, onUpdate, onRemove }: OrganismCardProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-4">
+          {/* Organism Name */}
           <div className="space-y-2">
-            <Label>GenBank Genome File (.gb/.gbf)</Label>
-            <FileInput
-              placeholder="/path/to/genome.gb"
-              value={organism.genomePath}
-              onChange={(value) => onUpdate({ ...organism, genomePath: value })}
-              accept=".gb,.gbf,.gbk"
-              fileType="GenBank"
+            <Label>Organism Name</Label>
+            <Input
+              placeholder="e.g., Escherichia-coli"
+              value={organism.name}
+              onChange={(e) => onUpdate({ ...organism, name: e.target.value })}
             />
           </div>
 
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label>GenBank Genome File (.gb/.gbf)</Label>
+              <FileInput
+                placeholder="/path/to/genome.gb"
+                value={organism.genomePath}
+                onChange={(value) => onUpdate({ ...organism, genomePath: value })}
+                accept=".gb,.gbf,.gbk"
+                fileType="GenBank"
+                displayValue={getDisplayPath(organism.genomePath)} // Show only filename
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Priority Score (1-100)</Label>
+              <Input
+                type="number"
+                min="1"
+                max="100"
+                value={organism.priority}
+                onChange={(e) =>
+                  onUpdate({
+                    ...organism,
+                    priority: Number.parseInt(e.target.value) || 50,
+                  })
+                }
+              />
+            </div>
+          </div>
+
           <div className="space-y-2">
-            <Label>Priority Score (1-100)</Label>
-            <Input
-              type="number"
-              min="1"
-              max="100"
-              value={organism.priority}
-              onChange={(e) =>
+            <Label>Expression Data CSV (Optional)</Label>
+            <FileInput
+              placeholder="/path/to/expression_data.csv"
+              value={organism.expressionDataPath || ""}
+              onChange={(value) =>
                 onUpdate({
                   ...organism,
-                  priority: Number.parseInt(e.target.value) || 50,
+                  expressionDataPath: value || undefined,
                 })
               }
+              accept=".csv"
+              fileType="CSV"
+              displayValue={organism.expressionDataPath ? getDisplayPath(organism.expressionDataPath) : ""}
             />
           </div>
-        </div>
-
-        <div className="mt-4 space-y-2">
-          <Label>Expression Data CSV (Optional)</Label>
-          <FileInput
-            placeholder="/path/to/expression_data.csv"
-            value={organism.expressionDataPath || ""}
-            onChange={(value) =>
-              onUpdate({
-                ...organism,
-                expressionDataPath: value || undefined,
-              })
-            }
-            accept=".csv"
-            fileType="CSV"
-          />
         </div>
       </CardContent>
     </Card>
@@ -320,9 +358,10 @@ interface FileInputProps {
   onChange: (value: string) => void
   accept: string
   fileType: string
+  displayValue?: string // Add optional display value
 }
 
-function FileInput({ id, placeholder, value, onChange, accept, fileType }: FileInputProps) {
+function FileInput({ id, placeholder, value, onChange, accept, fileType, displayValue }: FileInputProps) {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
@@ -391,7 +430,11 @@ function FileInput({ id, placeholder, value, onChange, accept, fileType }: FileI
       // Complete upload
       setUploadProgress(100)
       setUploadedFile(file)
-      onChange(file.name) // Store just the filename, in real app this would be the uploaded file path
+      // For web browsers, we can't get the full path due to security restrictions
+      // But we can simulate it or use the webkitRelativePath if available
+      const fullPath = (file as any).path || file.webkitRelativePath || `/path/to/${file.name}`
+      onChange(fullPath) // Store the full path
+      // onChange(file.name) // Store just the filename, in real app this would be the uploaded file path
 
       setTimeout(() => {
         setIsUploading(false)
@@ -423,7 +466,7 @@ function FileInput({ id, placeholder, value, onChange, accept, fileType }: FileI
         <Input
           id={id}
           placeholder={placeholder}
-          value={value}
+          value={displayValue || value} // Use displayValue if provided
           onChange={(e) => onChange(e.target.value)}
           className="flex-1"
         />

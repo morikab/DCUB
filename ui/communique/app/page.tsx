@@ -46,31 +46,52 @@ export default function DNAOptimizerPage() {
         return
       }
 
-      // Prepare JSON payload for backend
+      // Get current advanced options
+      const currentState = useOptimizationStore.getState()
+
+      // Prepare organisms object in the new format
+      const organismsObject: Record<string, any> = {}
+
+      // Add wanted organisms (optimized: true)
+      wantedOrganisms.forEach((org) => {
+        // Use organism name as key, fallback to generated name if empty
+        const organismKey = org.name || `wanted-organism-${org.id}`
+        organismsObject[organismKey] = {
+          genome_path: org.genomePath, // Use full path
+          optimized: true,
+          expression_csv_type: "protein_abundance",
+          expression_csv: org.expressionDataPath || null, // Use full path
+          optimization_priority: org.priority,
+        }
+      })
+
+      // Add unwanted organisms (optimized: false)
+      unwantedOrganisms.forEach((org) => {
+        // Use organism name as key, fallback to generated name if empty
+        const organismKey = org.name || `unwanted-organism-${org.id}`
+        organismsObject[organismKey] = {
+          genome_path: org.genomePath, // Use full path
+          optimized: false,
+          expression_csv_type: "protein_abundance",
+          expression_csv: org.expressionDataPath || null, // Use full path
+          optimization_priority: org.priority,
+        }
+      })
+
+      // Prepare JSON payload in the new structure
       const optimizationPayload = {
-        dna_sequence: {
-          content: sequenceFile ? null : dnaSequence,
-          file_name: sequenceFile?.name || null,
-          file_content: sequenceFile ? await fileToBase64(sequenceFile) : null,
+        user_input_dict: {
+          sequence_file_path: sequenceFile ? sequenceFile.name : null,
+          sequence: sequenceFile ? null : dnaSequence,
+          tuning_param: currentState.tuningParameter / 100, // Convert to 0-1 range
+          organisms: organismsObject,
+          clusters_count: 1,
+          orf_optimization_method: currentState.optimizationMethod,
+          orf_optimization_cub_index: currentState.cubIndex,
+          initiation_optimization_method: "original",
+          output_path: `results/commuique/${Date.now()}`,
+          evaluation_score: "average_distance",
         },
-        wanted_organisms: wantedOrganisms.map((org) => ({
-          id: org.id,
-          genome_path: org.genomePath,
-          priority: org.priority,
-          expression_data_path: org.expressionDataPath || null,
-        })),
-        unwanted_organisms: unwantedOrganisms.map((org) => ({
-          id: org.id,
-          genome_path: org.genomePath,
-          priority: org.priority,
-          expression_data_path: org.expressionDataPath || null,
-        })),
-        advanced_options: {
-          tuning_parameter: useOptimizationStore.getState().tuningParameter,
-          optimization_method: useOptimizationStore.getState().optimizationMethod,
-          cub_index: useOptimizationStore.getState().cubIndex,
-        },
-        timestamp: new Date().toISOString(),
       }
 
       console.log("Sending optimization request:", optimizationPayload)
@@ -146,21 +167,6 @@ export default function DNAOptimizerPage() {
       console.error("Error parsing response:", error)
       throw new Error("Invalid response format from server")
     }
-  }
-
-  // Helper function to convert file to base64
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader()
-      reader.readAsDataURL(file)
-      reader.onload = () => {
-        const result = reader.result as string
-        // Remove the data URL prefix (e.g., "data:text/plain;base64,")
-        const base64 = result.split(",")[1]
-        resolve(base64)
-      }
-      reader.onerror = (error) => reject(error)
-    })
   }
 
   const handleReset = () => {
@@ -328,6 +334,9 @@ export default function DNAOptimizerPage() {
             <p className="mt-2">
               <strong>Processing Time:</strong> Optimization can take several minutes to complete. Please be patient
               while the server processes your request.
+            </p>
+            <p className="mt-2">
+              <strong>API Endpoint:</strong> Requests are sent to http://localhost:8000/run-modules
             </p>
           </CardContent>
         </Card>
