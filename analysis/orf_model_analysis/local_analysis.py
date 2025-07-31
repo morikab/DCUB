@@ -264,11 +264,11 @@ if __name__ == "__main__":
     # )
     # --------------------------------------------------------------------------------------------------
     # Local debugging of a specific coding sequence
-    gene_sequence = "CTTGCAGTTGGACTTCCCAGGCCGACAGTGGTCTGGCTTCTGAGGGGTCAG"
+    gene_sequence = "ATGGCCTCCAACAAAACTACATTGCAAAAAATGGGAAAAAAACAGAATGGAAAGAGTAAAAAAGTTGAAGAGGCAGAGCCTGAAGAATTTGTCGTGGAAAAAGTACTAGATCGACGTGTAGTGAATGGGAAAGTGGAATATTTCCTGAAGTGGAAGGGATTTACAGATGCTGACAATACTTGGGAACCTGAAGAAAATTTAGATTGTCCAGAATTGATTGAAGCGTTTCTTAACTCTCAGAAAGCTGGCAAAGAAAAAGATGGTACAAAAAGAAAATCTTTATCTGACAGTGAATCTGATGACAGCAAATCAAAGAAGAAAAGAGATGCTGCTGACAAACCAAGAGGATTTGCCAGAGGTCTTGATCCTGAAAGAATAATTGGTGCCACAGACAGCAGTGGAGAATTGATGTTTCTCATGAAATGGAAAGATTCAGATGAGGCAGACTTGGTGCTGGCGAAAGAGGCAAATATGAAGTGTCCTCAAATTGTAATTGCTTTTTATGAAGAGAGACTAACTTGGCATTCTTGTCCAGAAGATGAAGCTCAATAA"
     results = run_single_method_ecoli_and_bacillus(
-        optimization_method="single_wanted_organism", # "zscore_bulk_aa_ratio"
-        optimization_cub_index="tAI",       # CAI
-        is_ecoli_optimized=True,
+        optimization_method="zscore_bulk_aa_ratio", # "single_wanted_organism"
+        optimization_cub_index="CAI",       # CAI
+        is_ecoli_optimized=False,
         output_path=f"debug",
         orf_sequence=gene_sequence,
         tuning_param=0.5,

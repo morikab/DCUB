@@ -247,10 +247,8 @@ def optimize_sequence_by_zscore_bulk_aa(
                 ).reshape(-1, 1)
                 min_zscore = all_scores.min()
                 max_zscore = all_scores.max()
-                # TODO - think if we want to do something with these kind of values
-                # distances = pdist(all_scores, metric="euclidean")
-                # min_dist = distances[distances!=0].min()
 
+                # TODO - need to replace the order of the normalizations here
                 for zscore in codons_to_zscore.values():
                     zscore.normalize(min_zscore=min_zscore, max_zscore=max_zscore)
                 if initial_sequence_score is None:
@@ -297,6 +295,8 @@ def optimize_sequence_by_zscore_bulk_aa(
                 optimization_cub_index=optimization_cub_index,
                 skipped_codons_num=skipped_codons_num,
             )
+            # TODO - I think that here we need to recalcualte the score from the previous iteration so we can better
+            #  compare between the scores of the different iterations.
 
             if optimization_method.is_zscore_ratio_score_optimization:
                 updated_min_zscore = min(min_zscore, zscore.min_zscore)
@@ -311,6 +311,8 @@ def optimize_sequence_by_zscore_bulk_aa(
                 "aa_to_selected_codon": aa_to_selected_codon,
                 "aa_to_default_codon": aa_to_default_codon,
                 "sequence_score": score,
+                "sequence_zscore": zscore.to_dict(),
+                "initial_sequence_zscore": initial_sequence_zscore.to_dict(),
             }
             iterations_summary.append(iteration_summary)
 
@@ -326,7 +328,6 @@ def optimize_sequence_by_zscore_bulk_aa(
         aa_to_optimal_codon = iterations_summary[-2]["aa_to_selected_codon"]
     else:
         aa_to_optimal_codon = []
-        print(aa_to_optimal_codon)
 
     orf_summary = {
         "initial_sequence": initial_sequence,
