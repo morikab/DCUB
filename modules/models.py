@@ -230,3 +230,14 @@ class SequenceZscores:
     @property
     def all_scores(self) -> list[float]:
         return self.wanted_hosts_scores + self.unwanted_hosts_scores
+
+    def to_dict(self) -> dict:
+        return {
+            "initial_wanted_hosts_scores": self.initial_wanted_hosts_scores,
+            "initial_unwanted_hosts_scores" : self.initial_unwanted_hosts_scores,
+            "min_score_for_normalization": self.min_score_for_normalization,
+            "max_score_for_normalization" : self.max_score_for_normalization,
+            "normalized_wanted_hosts_scores" : self.normalized_wanted_hosts_scores,
+            "normalized_unwanted_hosts_scores" : self.normalized_unwanted_hosts_scores,
+        }
+

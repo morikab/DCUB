@@ -42,12 +42,6 @@ def optimize_sequence_by_zscore_single_aa(
     """
     with Timer() as timer:
         initial_sequence = sequence
-        previous_sequence_zscore = _calculate_zscore_for_sequence(
-            sequence=sequence,
-            module_input=module_input,
-            optimization_cub_index=optimization_cub_index,
-            skipped_codons_num=skipped_codons_num,
-        )
         initial_sequence_score = None
 
         aa_to_codon_mapping = defaultdict(str)
@@ -55,6 +49,12 @@ def optimize_sequence_by_zscore_single_aa(
         iterations_summary = []
         for run in range(max_iterations):
             iterations_count = run + 1
+            previous_sequence_zscore = _calculate_zscore_for_sequence(
+                sequence=sequence,
+                module_input=module_input,
+                optimization_cub_index=optimization_cub_index,
+                skipped_codons_num=skipped_codons_num,
+            )
             # Include also the sequence from the previous iteration
             sequence_to_zscore = {sequence: previous_sequence_zscore}
             tested_sequence_to_codon = defaultdict(list)
@@ -80,9 +80,12 @@ def optimize_sequence_by_zscore_single_aa(
                 )
 
             if optimization_method.is_zscore_ratio_score_optimization:
-                min_zscore = min(score.min_zscore for score in sequence_to_zscore.values())
-                max_zscore = max(score.max_zscore for score in sequence_to_zscore.values())
-
+                all_zscores = np.array(
+                    [pt for zscore in sequence_to_zscore.values() for pt in zscore.all_scores]
+                ).reshape(-1, 1)
+                max_zscore_distance = pdist(all_zscores).max()
+                min_zscore = all_zscores.min() - max_zscore_distance
+                max_zscore = all_zscores.max() + max_zscore_distance
                 for score in sequence_to_zscore.values():
                     score.normalize(min_zscore=min_zscore, max_zscore=max_zscore)
 
@@ -141,14 +144,6 @@ def optimize_sequence_by_zscore_single_aa(
                 break
 
             sequence = new_sequence
-            previous_sequence_score = new_sequence_score
-            # We need the zscore of the sequence so we can normalize it according to the new iteration's range
-            previous_sequence_zscore = _calculate_zscore_for_sequence(
-                sequence=sequence,
-                module_input=module_input,
-                optimization_cub_index=optimization_cub_index,
-                skipped_codons_num=skipped_codons_num,
-            )
             for selected_codon in selected_codons:
                 # If the aa does not appear at all in the cds, this may give a faulty result (that should be consistent)
                 aa_to_codon_mapping[nt_to_aa[selected_codon]] = selected_codon
@@ -225,6 +220,10 @@ def optimize_sequence_by_zscore_bulk_aa(
         initial_sequence_score = None
         iterations_count = 0
         iterations_summary = []
+        previous_sequence_score = None
+        previous_sequence_zscore = None
+        min_iteration_zscore = None
+        max_iteration_zscore = None
         for run in range(max_iterations):
             logger.info(f"Starting run {run+1}.")
             iterations_count = run + 1
@@ -242,21 +241,19 @@ def optimize_sequence_by_zscore_bulk_aa(
                     skipped_codons_num=skipped_codons_num,
                 )
             if optimization_method.is_zscore_ratio_score_optimization:
-                all_scores = np.array(
+                all_zscores = np.array(
                     [pt for zscore in codons_to_zscore.values() for pt in zscore.all_scores]
                 ).reshape(-1, 1)
-                min_zscore = all_scores.min()
-                max_zscore = all_scores.max()
-                # TODO - think if we want to do something with these kind of values
-                # distances = pdist(all_scores, metric="euclidean")
-                # min_dist = distances[distances!=0].min()
+                max_zscore_distance = pdist(all_zscores).max()
+                min_candidate_zscore = all_zscores.min()
+                max_candidate_zscore = all_zscores.max()
 
+                min_iteration_zscore = min(min_candidate_zscore, initial_sequence_zscore.min_zscore) - max_zscore_distance
+                max_iteration_zscore = min(max_candidate_zscore, initial_sequence_zscore.max_zscore) + max_zscore_distance
                 for zscore in codons_to_zscore.values():
-                    zscore.normalize(min_zscore=min_zscore, max_zscore=max_zscore)
+                    zscore.normalize(min_zscore=min_iteration_zscore, max_zscore=max_iteration_zscore)
                 if initial_sequence_score is None:
-                    initial_min_zscore = min(min_zscore, initial_sequence_zscore.min_zscore)
-                    initial_max_zscore = max(max_zscore, initial_sequence_zscore.max_zscore)
-                    initial_sequence_zscore.normalize(min_zscore=initial_min_zscore, max_zscore=initial_max_zscore)
+                    initial_sequence_zscore.normalize(min_zscore=min_iteration_zscore, max_zscore=max_iteration_zscore)
 
             codons_to_total_score = {
                 codon: get_total_score(zscore=zscore,
@@ -269,7 +266,6 @@ def optimize_sequence_by_zscore_bulk_aa(
                 initial_sequence_score = get_total_score(zscore=initial_sequence_zscore,
                                                          optimization_method=optimization_method,
                                                          tuning_parameter=module_input.tuning_parameter)
-                previous_sequence_score = initial_sequence_score
 
             aa_to_selected_codon, aa_to_default_codon = _get_optimal_codon_per_aa(
                 codons_to_total_score=codons_to_total_score,
@@ -299,9 +295,20 @@ def optimize_sequence_by_zscore_bulk_aa(
             )
 
             if optimization_method.is_zscore_ratio_score_optimization:
-                updated_min_zscore = min(min_zscore, zscore.min_zscore)
-                updated_max_zscore = max(max_zscore, zscore.max_zscore)
-                zscore.normalize(min_zscore=updated_min_zscore, max_zscore=updated_max_zscore)
+                min_iteration_zscore = min(min_iteration_zscore, zscore.min_zscore) - max_zscore_distance
+                max_iteration_zscore = max(max_iteration_zscore, zscore.max_zscore) + max_zscore_distance
+                zscore.normalize(min_zscore=min_iteration_zscore, max_zscore=max_iteration_zscore)
+
+                previous_sequence_zscore = _calculate_zscore_for_sequence(
+                    sequence=sequence,
+                    module_input=module_input,
+                    optimization_cub_index=optimization_cub_index,
+                    skipped_codons_num=skipped_codons_num,
+                )
+                previous_sequence_zscore.normalize(min_zscore=min_iteration_zscore, max_zscore=max_iteration_zscore)
+                previous_sequence_score = get_total_score(zscore=previous_sequence_zscore,
+                                                          optimization_method=optimization_method,
+                                                          tuning_parameter=module_input.tuning_parameter)
 
             score = get_total_score(zscore=zscore,
                                     optimization_method=optimization_method,
@@ -311,6 +318,8 @@ def optimize_sequence_by_zscore_bulk_aa(
                 "aa_to_selected_codon": aa_to_selected_codon,
                 "aa_to_default_codon": aa_to_default_codon,
                 "sequence_score": score,
+                "sequence_zscore": zscore.to_dict(),
+                "initial_sequence_zscore": initial_sequence_zscore.to_dict(),
             }
             iterations_summary.append(iteration_summary)
 
@@ -326,7 +335,6 @@ def optimize_sequence_by_zscore_bulk_aa(
         aa_to_optimal_codon = iterations_summary[-2]["aa_to_selected_codon"]
     else:
         aa_to_optimal_codon = []
-        print(aa_to_optimal_codon)
 
     orf_summary = {
         "initial_sequence": initial_sequence,
