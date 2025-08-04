@@ -1,7 +1,7 @@
 {
-  "name": "dna-sequence-optimizer-electron",
+  "name": "commuique-electron",
   "version": "1.0.0",
-  "description": "DNA Sequence Optimizer Desktop Application",
+  "description": "Commuique Desktop Application",
   "main": "main.js",
   "scripts": {
     "electron": "electron .",
@@ -11,8 +11,8 @@
     "pack": "electron-builder --dir"
   },
   "build": {
-    "appId": "com.dnaoptimizer.app",
-    "productName": "DNA Sequence Optimizer",
+    "appId": "com.commuique.app",
+    "productName": "commuique",
     "directories": {
       "output": "dist"
     },

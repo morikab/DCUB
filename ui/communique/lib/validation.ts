@@ -7,23 +7,28 @@ export function validateFastaSequence(sequence: string): ValidationResult {
 
   const lines = sequence.trim().split("\n")
 
-  // Check if it starts with a header
-  if (!lines[0].startsWith(">")) {
-    return { isValid: false, error: "FASTA sequence must start with a header line (>)" }
+  let sequenceContent: string
+
+  // Check if it starts with a FASTA header
+  if (lines[0].startsWith(">")) {
+    // FASTA format: extract sequence from lines after the header
+    sequenceContent = lines.slice(1).join("").replace(/\s/g, "").toUpperCase()
+  } else {
+    // Plain sequence format: use all lines as sequence
+    sequenceContent = lines.join("").replace(/\s/g, "").toUpperCase()
   }
 
   // Validate sequence content
-  const sequenceLines = lines.slice(1).join("").replace(/\s/g, "").toUpperCase()
   const validBases = /^[ATGCNRYSWKMBDHV]*$/
 
-  if (!validBases.test(sequenceLines)) {
+  if (!validBases.test(sequenceContent)) {
     return {
       isValid: false,
       error: "Sequence contains invalid characters. Only DNA bases (A, T, G, C) and IUPAC codes are allowed",
     }
   }
 
-  if (sequenceLines.length === 0) {
+  if (sequenceContent.length === 0) {
     return { isValid: false, error: "Sequence cannot be empty" }
   }
 

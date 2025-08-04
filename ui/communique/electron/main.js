@@ -16,6 +16,7 @@ function createWindow() {
       contextIsolation: true,
       enableRemoteModule: false,
       preload: path.join(__dirname, "preload.js"),
+      webSecurity: false,  // TODO - remove this after handling file objects properly
     },
     icon: path.join(__dirname, "assets", "icon.png"), // Add your app icon
     titleBarStyle: "default",

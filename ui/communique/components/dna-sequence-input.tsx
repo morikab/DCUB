@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import { Progress } from "@/components/ui/progress"
-import { Upload, FileText, X, Download } from "lucide-react"
+import { Upload, FileText, X, Download, Info } from "lucide-react"
 import { useOptimizationStore } from "@/lib/store"
 import { validateFastaSequence } from "@/lib/validation"
 
@@ -16,18 +16,68 @@ export function DnaSequenceInput() {
   const [uploadProgress, setUploadProgress] = useState(0)
   const [isUploading, setIsUploading] = useState(false)
   const [validationError, setValidationError] = useState("")
+  const [sequenceInfo, setSequenceInfo] = useState<{ title: string; length: number } | null>(null)
+  const [displayText, setDisplayText] = useState("") // Store the original FASTA text for display
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const { dnaSequence, sequenceFile, setDnaSequence, setSequenceFile } = useOptimizationStore()
 
+  // Function to parse FASTA format and extract sequence only
+  const parseFastaSequence = (fastaText: string): { sequence: string; title: string } => {
+    const lines = fastaText.trim().split("\n")
+    let title = ""
+    let sequence = ""
+
+    for (const line of lines) {
+      const trimmedLine = line.trim()
+      if (trimmedLine.startsWith(">")) {
+        // Extract title (remove the '>' character)
+        title = trimmedLine.substring(1).trim()
+      } else if (trimmedLine) {
+        // Accumulate sequence lines, removing any whitespace
+        sequence += trimmedLine.replace(/\s/g, "").toUpperCase()
+      }
+    }
+
+    return { sequence, title }
+  }
+
   const handleTextChange = (value: string) => {
-    setDnaSequence(value)
     setSequenceFile(null)
+    setSequenceInfo(null)
+    setDisplayText(value) // Always store the original input for display
 
     if (value.trim()) {
       const validation = validateFastaSequence(value)
-      setValidationError(validation.isValid ? "" : validation.error || "")
+      if (validation.isValid) {
+        // Parse FASTA and extract sequence
+        const { sequence, title } = parseFastaSequence(value)
+        setDnaSequence(sequence) // Store only the sequence for API
+        setSequenceInfo({
+          title: title || "Untitled sequence",
+          length: sequence.length,
+        })
+        setValidationError("")
+      } else {
+        // For invalid FASTA, check if it's just a raw sequence
+        const cleanSequence = value.replace(/\s/g, "").toUpperCase()
+        const validBases = /^[ATGCNRYSWKMBDHV]*$/
+
+        if (validBases.test(cleanSequence) && cleanSequence.length > 0) {
+          // It's a raw sequence without FASTA header
+          setDnaSequence(cleanSequence)
+          setSequenceInfo({
+            title: "Raw sequence (no header)",
+            length: cleanSequence.length,
+          })
+          setValidationError("")
+        } else {
+          setDnaSequence("") // Don't store invalid sequences
+          setValidationError(validation.error || "")
+        }
+      }
     } else {
+      setDnaSequence("")
       setValidationError("")
     }
   }
@@ -51,6 +101,7 @@ export function DnaSequenceInput() {
     setIsUploading(true)
     setUploadProgress(0)
     setValidationError("")
+    setSequenceInfo(null)
 
     try {
       // Simulate upload progress
@@ -71,13 +122,23 @@ export function DnaSequenceInput() {
       const validation = validateFastaSequence(text)
       if (!validation.isValid) {
         setValidationError(validation.error || "Invalid FASTA format")
+        setIsUploading(false)
+        setUploadProgress(0)
         return
       }
+
+      // Parse FASTA and extract sequence
+      const { sequence, title } = parseFastaSequence(text)
 
       // Complete upload
       setUploadProgress(100)
       setSequenceFile(file)
-      setDnaSequence("")
+      setDnaSequence(sequence) // Store only the sequence for API
+      setDisplayText("") // Clear manual entry when file is uploaded
+      setSequenceInfo({
+        title: title || file.name,
+        length: sequence.length,
+      })
 
       setTimeout(() => {
         setIsUploading(false)
@@ -92,7 +153,10 @@ export function DnaSequenceInput() {
 
   const removeFile = () => {
     setSequenceFile(null)
+    setSequenceInfo(null)
     setValidationError("")
+    setDnaSequence("")
+    setDisplayText("")
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
@@ -129,7 +193,7 @@ CTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGTAG`
         {/* Manual Input */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <Label htmlFor="dna-sequence">Manual Entry (FASTA Format)</Label>
+            <Label htmlFor="dna-sequence">Manual Entry (FASTA Format or Raw Sequence)</Label>
             <Button
               variant="ghost"
               size="sm"
@@ -143,8 +207,11 @@ CTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGTAG`
           <Textarea
             id="dna-sequence"
             placeholder={`>sequence_name
+ATGCGATCGATCGATCGATCG...
+
+Or just enter raw sequence:
 ATGCGATCGATCGATCGATCG...`}
-            value={dnaSequence}
+            value={displayText} // Show the original input
             onChange={(e) => handleTextChange(e.target.value)}
             disabled={!!sequenceFile}
             className="min-h-32 font-mono text-sm"
@@ -173,7 +240,7 @@ ATGCGATCGATCGATCGATCG...`}
                 <Button
                   variant="outline"
                   onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading || !!dnaSequence.trim()}
+                  disabled={isUploading || !!displayText.trim()}
                 >
                   <Upload className="w-4 h-4 mr-2" />
                   Choose File
@@ -195,6 +262,43 @@ ATGCGATCGATCGATCGATCG...`}
           )}
         </div>
 
+        {/* Sequence Information Display */}
+        {sequenceInfo && (
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <div className="flex items-start gap-2">
+              <Info className="w-5 h-5 text-blue-600 mt-0.5 flex-shrink-0" />
+              <div className="space-y-2">
+                <h4 className="font-medium text-blue-900">Sequence Information</h4>
+                <div className="text-sm text-blue-800 space-y-1">
+                  <p>
+                    <strong>Title:</strong> {sequenceInfo.title}
+                  </p>
+                  <p>
+                    <strong>Length:</strong> {sequenceInfo.length.toLocaleString()} nucleotides
+                  </p>
+                  <p>
+                    <strong>Status:</strong> Ready for optimization (sequence content extracted)
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Extracted Sequence Preview (only show if different from display) */}
+        {dnaSequence && displayText && displayText !== dnaSequence && (
+          <div className="space-y-2">
+            <Label>Extracted Sequence (will be sent to API)</Label>
+            <div className="bg-gray-50 p-3 rounded-md border max-h-32 overflow-y-auto">
+              <p className="text-xs font-mono text-gray-700 break-all">
+                {dnaSequence.length > 200
+                  ? `${dnaSequence.substring(0, 200)}... (${dnaSequence.length} total nucleotides)`
+                  : dnaSequence}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Validation Error */}
         {validationError && (
           <div className="text-red-600 text-sm bg-red-50 p-3 rounded-md border border-red-200">{validationError}</div>
@@ -203,13 +307,14 @@ ATGCGATCGATCGATCGATCG...`}
         {/* Info */}
         <div className="text-sm text-gray-500 bg-gray-50 p-3 rounded-md">
           <p>
-            <strong>FASTA Format Requirements:</strong>
+            <strong>Input Processing:</strong>
           </p>
           <ul className="list-disc list-inside mt-1 space-y-1">
-            <li>Must start with a header line beginning with {">"}</li>
-            <li>Sequence should contain only valid DNA bases (A, T, G, C, N)</li>
-            <li>IUPAC nucleotide codes are supported</li>
-            <li>Multiple sequences are supported</li>
+            <li>Your original input (including headers) is preserved in the text box</li>
+            <li>Only the DNA sequence content is extracted and sent for optimization</li>
+            <li>Supports both FASTA format and raw sequence input</li>
+            <li>Headers and formatting are automatically parsed but not included in processing</li>
+            <li>Sequences are cleaned and validated before optimization</li>
             <li>File size limit: 10MB</li>
           </ul>
         </div>
