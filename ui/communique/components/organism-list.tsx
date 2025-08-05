@@ -196,37 +196,46 @@ ORIGIN
                   Sample .gb
                 </Button>
               </div>
-              <FileInput
-                id="genome-path"
-                placeholder="/path/to/genome.gb"
-                value={newOrganism.genomePath || ""}
-                onChange={(value) => setNewOrganism((prev) => ({ ...prev, genomePath: value }))}
-                accept=".gb,.gbf,.gbff,.gbk"
-                fileType="GenBank"
-                onOrganismNameSuggestion={(suggestedName) => {
-                  // Only update if the name field is empty
-                  if (!newOrganism.name?.trim()) {
-                    setNewOrganism((prev) => ({ ...prev, name: suggestedName }))
-                  }
-                }}
-              />
+              <div className="flex-1 min-h-[120px]">
+                <FileInput
+                  id="genome-path"
+                  placeholder="/path/to/genome.gb"
+                  value={newOrganism.genomePath || ""}
+                  onChange={(value) => setNewOrganism((prev) => ({ ...prev, genomePath: value }))}
+                  accept=".gb,.gbf,.gbff,.gbk"
+                  fileType="GenBank"
+                  onOrganismNameSuggestion={(suggestedName) => {
+                    // Only update if the name field is empty
+                    if (!newOrganism.name?.trim()) {
+                      setNewOrganism((prev) => ({ ...prev, name: suggestedName }))
+                    }
+                  }}
+                />
+              </div>
+              
             </div>
             <div className="space-y-2">
-              <Label htmlFor="priority">Priority Score (1-100)</Label>
-              <Input
-                id="priority"
-                type="number"
-                min="1"
-                max="100"
-                placeholder={`Default: ${calculateDefaultPriority()}`}
-                value={newOrganism.priority || ""}
-                onChange={(e) =>
-                  setNewOrganism((prev) => ({
-                    ...prev,
-                    priority: e.target.value ? Number.parseInt(e.target.value) : undefined,
-                  }))
-                }
-              />
+              <div/>
+              <div>
+                 <Label htmlFor="priority">Priority Score (1-100)</Label>
+              </div>
+              <div className="min-h-[47px] flex items-end">
+                <Input
+                  id="priority"
+                  type="number"
+                  min="1"
+                  max="100"
+                  accept="1-100"
+                  placeholder={`Default: ${calculateDefaultPriority()}`}
+                  value={newOrganism.priority || ""}
+                  onChange={(e) =>
+                    setNewOrganism((prev) => ({
+                      ...prev,
+                      priority: e.target.value ? Number.parseInt(e.target.value) : undefined,
+                    }))
+                  }
+                />
+              </div>
             </div>
           </div>
           <div className="space-y-2">
@@ -307,7 +316,7 @@ function OrganismCard({ organism, onUpdate, onRemove }: OrganismCardProps) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>GenBank Genome File (.gb/.gbff)</Label>
+              <Label>GenBank Genome File (.gb/.gbf/.gbff)</Label>
               <FileInput
                 placeholder="/path/to/genome.gb"
                 value={organism.genomePath}
