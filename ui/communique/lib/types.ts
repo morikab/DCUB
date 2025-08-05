@@ -22,9 +22,9 @@ export interface SubmissionData {
 export interface OptimizationResult {
   optimized_sequence: string
   evaluation_scores: {
-    cai_score: number
-    gc_content: number
-    codon_usage_bias: number
+    average_distance_score: number
+    ratio_score: number
+    weakest_link_score: number
   }
   original_sequence: string
   optimization_parameters: {

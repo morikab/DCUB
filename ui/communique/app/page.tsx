@@ -148,12 +148,18 @@ export default function DNAOptimizerPage() {
   const parseOptimizationResponse = (response: any): OptimizationResult => {
     try {
       return {
-        optimized_sequence: response.optimized_sequence || response.sequence || "",
+        optimized_sequence: response.final_evaluation?.final_sequence || "",
+        // optimized_sequence: response.optimized_sequence || response.sequence || "",
         evaluation_scores: {
-          cai_score: response.evaluation_scores?.cai_score || response.cai_score || 0,
-          gc_content: response.evaluation_scores?.gc_content || response.gc_content || 0,
-          codon_usage_bias: response.evaluation_scores?.codon_usage_bias || response.codon_usage_bias || 0,
+          average_distance_score: response.final_evaluation?.average_distance_score || 0,
+          ratio_score: response.final_evaluation?.ratio_score || 0,
+          weakest_link_score: response.final_evaluation?.weakest_link_score || 0,
         },
+        // evaluation_scores: {
+        //  cai_score: response.evaluation_scores?.cai_score || response.cai_score || 0,
+        //  gc_content: response.evaluation_scores?.gc_content || response.gc_content || 0,
+        //  codon_usage_bias: response.evaluation_scores?.codon_usage_bias || response.codon_usage_bias || 0,
+        // },
         original_sequence: response.original_sequence || dnaSequence || sequenceFile?.name || "",
         optimization_parameters: {
           tuning_parameter: useOptimizationStore.getState().tuningParameter,
@@ -165,6 +171,7 @@ export default function DNAOptimizerPage() {
       }
     } catch (error) {
       console.error("Error parsing response:", error)
+      console.error("Response:", response)
       throw new Error("Invalid response format from server")
     }
   }

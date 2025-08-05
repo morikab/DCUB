@@ -185,7 +185,7 @@ ORIGIN
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
-                <Label htmlFor="genome-path">GenBank Genome File (.gb/.gbf) *</Label>
+                <Label htmlFor="genome-path">GenBank Genome File (.gb/.gbff) *</Label>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -201,8 +201,14 @@ ORIGIN
                 placeholder="/path/to/genome.gb"
                 value={newOrganism.genomePath || ""}
                 onChange={(value) => setNewOrganism((prev) => ({ ...prev, genomePath: value }))}
-                accept=".gb,.gbf,.gbk"
+                accept=".gb,.gbf,.gbff,.gbk"
                 fileType="GenBank"
+                onOrganismNameSuggestion={(suggestedName) => {
+                  // Only update if the name field is empty
+                  if (!newOrganism.name?.trim()) {
+                    setNewOrganism((prev) => ({ ...prev, name: suggestedName }))
+                  }
+                }}
               />
             </div>
             <div className="space-y-2">
@@ -301,14 +307,18 @@ function OrganismCard({ organism, onUpdate, onRemove }: OrganismCardProps) {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label>GenBank Genome File (.gb/.gbf)</Label>
+              <Label>GenBank Genome File (.gb/.gbff)</Label>
               <FileInput
                 placeholder="/path/to/genome.gb"
                 value={organism.genomePath}
                 onChange={(value) => onUpdate({ ...organism, genomePath: value })}
-                accept=".gb,.gbf,.gbk"
+                accept=".gb,.gbf,.gbk,.gbff"
                 fileType="GenBank"
-                displayValue={getDisplayPath(organism.genomePath)} // Show only filename
+                displayValue={getDisplayPath(organism.genomePath)}
+                onOrganismNameSuggestion={(suggestedName) => {
+                  // Update organism name with suggested name
+                  onUpdate({ ...organism, name: suggestedName })
+                }}
               />
             </div>
 
@@ -358,10 +368,20 @@ interface FileInputProps {
   onChange: (value: string) => void
   accept: string
   fileType: string
-  displayValue?: string // Add optional display value
+  displayValue?: string
+  onOrganismNameSuggestion?: (name: string) => void 
 }
 
-function FileInput({ id, placeholder, value, onChange, accept, fileType, displayValue }: FileInputProps) {
+function FileInput({ 
+  id, 
+  placeholder, 
+  value, 
+  onChange, 
+  accept, 
+  fileType, 
+  displayValue,
+  onOrganismNameSuggestion
+ }: FileInputProps) {
   const [isUploading, setIsUploading] = useState(false)
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
@@ -433,8 +453,17 @@ function FileInput({ id, placeholder, value, onChange, accept, fileType, display
       // For web browsers, we can't get the full path due to security restrictions
       // But we can simulate it or use the webkitRelativePath if available
       const fullPath = (file as any).path || file.webkitRelativePath || `/path/to/${file.name}`
-      onChange(fullPath) // Store the full path
-      // onChange(file.name) // Store just the filename, in real app this would be the uploaded file path
+      onChange(fullPath)
+
+      if (fileType === "GenBank" && id === "genome-path") {
+        const filename = file.name
+        const nameWithoutExtension = filename.replace(/\.(gb|gbff|gbk)$/i, "")
+        // Trigger organism name update through a callback
+        if (onOrganismNameSuggestion) {
+          onOrganismNameSuggestion(nameWithoutExtension)
+        }
+      } 
+      // onChange(file.name) // TODO - Store just the filename, in real app this would be the uploaded file path
 
       setTimeout(() => {
         setIsUploading(false)
@@ -520,7 +549,7 @@ function FileInput({ id, placeholder, value, onChange, accept, fileType, display
       {/* File Type Info */}
       <div className="text-xs text-gray-500">
         {fileType === "GenBank" ? (
-          <span>Accepted formats: .gb, .gbf, .gbk (Max: 50MB)</span>
+          <span>Accepted formats: .gb, .gbf, .gbff, .gbk (Max: 50MB)</span>
         ) : (
           <span>Accepted format: .csv (Max: 10MB)</span>
         )}

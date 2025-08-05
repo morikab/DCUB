@@ -72,18 +72,18 @@ ${result.optimized_sequence}`
     return sequence.match(new RegExp(`.{1,${lineLength}}`, "g"))?.join("\n") || sequence
   }
 
-  const getScoreColor = (score: number, type: "cai" | "gc" | "cub") => {
-    if (type === "cai") {
+  const getScoreColor = (score: number, type: "average_distance" | "ratio" | "weakest_link") => {
+    if (type === "average_distance") {
       if (score >= 0.8) return "text-green-600"
       if (score >= 0.6) return "text-yellow-600"
       return "text-red-600"
     }
-    if (type === "gc") {
+    if (type === "ratio") {
       if (score >= 40 && score <= 60) return "text-green-600"
       if (score >= 30 && score <= 70) return "text-yellow-600"
       return "text-red-600"
     }
-    if (type === "cub") {
+    if (type === "weakest_link") {
       if (score >= 0.7) return "text-green-600"
       if (score >= 0.5) return "text-yellow-600"
       return "text-red-600"
@@ -91,7 +91,7 @@ ${result.optimized_sequence}`
     return "text-gray-600"
   }
 
-  const getScoreBadgeVariant = (score: number, type: "cai" | "gc" | "cub") => {
+  const getScoreBadgeVariant = (score: number, type: "average_distance" | "ratio" | "weakest_link") => {
     const color = getScoreColor(score, type)
     if (color.includes("green")) return "default"
     if (color.includes("yellow")) return "secondary"
@@ -155,31 +155,29 @@ ${result.optimized_sequence}`
               <div className="space-y-3">
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div>
-                    <p className="font-medium text-gray-900">CAI Score</p>
-                    <p className="text-xs text-gray-600">Codon Adaptation Index</p>
+                    <p className="font-medium text-gray-900">Weakest Link Score</p>
                   </div>
-                  <Badge variant={getScoreBadgeVariant(result.evaluation_scores.cai_score, "cai")}>
-                    {result.evaluation_scores.cai_score.toFixed(3)}
+                  <Badge variant={getScoreBadgeVariant(result.evaluation_scores.average_distance_score, "average_distance")}>
+                    {result.evaluation_scores.average_distance_score.toFixed(3)}
                   </Badge>
                 </div>
 
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div>
-                    <p className="font-medium text-gray-900">GC Content</p>
-                    <p className="text-xs text-gray-600">Percentage of G+C bases</p>
+                    <p className="font-medium text-gray-900">Ratio Score</p>
                   </div>
-                  <Badge variant={getScoreBadgeVariant(result.evaluation_scores.gc_content, "gc")}>
-                    {result.evaluation_scores.gc_content.toFixed(1)}%
+                  <Badge variant={getScoreBadgeVariant(result.evaluation_scores.ratio_score, "ratio")}>
+                    {result.evaluation_scores.ratio_score.toFixed(1)}%
                   </Badge>
                 </div>
 
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div>
-                    <p className="font-medium text-gray-900">Codon Usage Bias</p>
-                    <p className="text-xs text-gray-600">Usage pattern similarity</p>
+                    <p className="font-medium text-gray-900">Weakest Link Score</p>
+                    <p className="text-xs text-gray-600">Minimal differetial distance between organisms groups</p>
                   </div>
-                  <Badge variant={getScoreBadgeVariant(result.evaluation_scores.codon_usage_bias, "cub")}>
-                    {result.evaluation_scores.codon_usage_bias.toFixed(3)}
+                  <Badge variant={getScoreBadgeVariant(result.evaluation_scores.weakest_link_score, "weakest_link")}>
+                    {result.evaluation_scores.weakest_link_score.toFixed(3)}
                   </Badge>
                 </div>
               </div>
