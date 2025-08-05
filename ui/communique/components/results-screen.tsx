@@ -155,7 +155,7 @@ ${result.optimized_sequence}`
               <div className="space-y-3">
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div>
-                    <p className="font-medium text-gray-900">Weakest Link Score</p>
+                    <p className="font-medium text-gray-900">Average Distance Score</p>
                   </div>
                   <Badge variant={getScoreBadgeVariant(result.evaluation_scores.average_distance_score, "average_distance")}>
                     {result.evaluation_scores.average_distance_score.toFixed(3)}
@@ -165,16 +165,17 @@ ${result.optimized_sequence}`
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div>
                     <p className="font-medium text-gray-900">Ratio Score</p>
+                    {/*<p className="text-xs text-gray-600">Ratio of gemetric means between organism groups</p>*/}
                   </div>
                   <Badge variant={getScoreBadgeVariant(result.evaluation_scores.ratio_score, "ratio")}>
-                    {result.evaluation_scores.ratio_score.toFixed(1)}%
+                    {result.evaluation_scores.ratio_score.toFixed(3)}
                   </Badge>
                 </div>
 
                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                   <div>
                     <p className="font-medium text-gray-900">Weakest Link Score</p>
-                    <p className="text-xs text-gray-600">Minimal differetial distance between organisms groups</p>
+                    {/*<p className="text-xs text-gray-600">Minimal differetial distance between organism groups</p>*/}
                   </div>
                   <Badge variant={getScoreBadgeVariant(result.evaluation_scores.weakest_link_score, "weakest_link")}>
                     {result.evaluation_scores.weakest_link_score.toFixed(3)}

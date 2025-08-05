@@ -117,7 +117,8 @@ export default function DNAOptimizerPage() {
         throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
       }
 
-      const result = await response.json()
+      const raw_response = await response.json()
+      const result = raw_response?.result
       console.log("Optimization result:", result)
 
       // Parse and validate the response
@@ -145,33 +146,34 @@ export default function DNAOptimizerPage() {
   }
 
   // Helper function to parse optimization response
-  const parseOptimizationResponse = (response: any): OptimizationResult => {
+  const parseOptimizationResponse = (optimization_result: any): OptimizationResult => {
+    console.info(optimization_result.final_evaluation)
     try {
       return {
-        optimized_sequence: response.final_evaluation?.final_sequence || "",
+        optimized_sequence: optimization_result.final_evaluation.final_sequence || "",
         // optimized_sequence: response.optimized_sequence || response.sequence || "",
         evaluation_scores: {
-          average_distance_score: response.final_evaluation?.average_distance_score || 0,
-          ratio_score: response.final_evaluation?.ratio_score || 0,
-          weakest_link_score: response.final_evaluation?.weakest_link_score || 0,
+          average_distance_score: optimization_result.final_evaluation.average_distance_score || 0,
+          ratio_score: optimization_result.final_evaluation?.ratio_score || 0,
+          weakest_link_score: optimization_result.final_evaluation?.weakest_link_score || 0,
         },
         // evaluation_scores: {
         //  cai_score: response.evaluation_scores?.cai_score || response.cai_score || 0,
         //  gc_content: response.evaluation_scores?.gc_content || response.gc_content || 0,
         //  codon_usage_bias: response.evaluation_scores?.codon_usage_bias || response.codon_usage_bias || 0,
         // },
-        original_sequence: response.original_sequence || dnaSequence || sequenceFile?.name || "",
+        original_sequence: optimization_result.original_sequence || dnaSequence || sequenceFile?.name || "",
         optimization_parameters: {
           tuning_parameter: useOptimizationStore.getState().tuningParameter,
           optimization_method: useOptimizationStore.getState().optimizationMethod,
           cub_index: useOptimizationStore.getState().cubIndex,
         },
-        processing_time: response.processing_time || 0,
-        timestamp: response.timestamp || new Date().toISOString(),
+        processing_time: optimization_result.processing_time || 0,
+        timestamp: optimization_result.timestamp || new Date().toISOString(),
       }
     } catch (error) {
       console.error("Error parsing response:", error)
-      console.error("Response:", response)
+      console.error("Result:", optimization_result)
       throw new Error("Invalid response format from server")
     }
   }
