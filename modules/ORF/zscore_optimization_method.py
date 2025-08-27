@@ -266,6 +266,7 @@ def optimize_sequence_by_zscore_bulk_aa(
                 initial_sequence_score = get_total_score(zscore=initial_sequence_zscore,
                                                          optimization_method=optimization_method,
                                                          tuning_parameter=module_input.tuning_parameter)
+                previous_sequence_score = initial_sequence_score
 
             aa_to_selected_codon, aa_to_default_codon = _get_optimal_codon_per_aa(
                 codons_to_total_score=codons_to_total_score,
