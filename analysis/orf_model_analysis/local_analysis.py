@@ -1,3 +1,4 @@
+import itertools
 import json
 import os
 import re
@@ -251,28 +252,39 @@ if __name__ == "__main__":
     # )
     # --------------------------------------------------------------------------------------------------
     # Local debugging of mcherry variants
+    initiation_type = "original"
     # initiation_type = "external"
-    # results = run_single_method_ecoli_and_bacillus(
-    #     # optimization_method="zscore_single_aa_diff",
-    #     optimization_method="zscore_single_aa_ratio",
-    #     # optimization_method="single_codon_diff",
-    #     optimization_cub_index="CAI",
-    #     is_ecoli_optimized=True,
-    #     output_path=f"mcherry-debug",
-    #     orf_sequence_file=DEFAULT_SEQUENCE_FILE_PATH,
-    #     initiation_optimization_method=initiation_type,
-    #     # orf_sequence="",
-    # )
+    optimization_methods =  [
+        "single_codon_diff",
+        "single_codon_ratio",
+        "zscore_bulk_aa_diff",
+        "zscore_bulk_aa_ratio",
+        "single_wanted_organism",
+    ]
+    ecoli_optimizations = [True, False]
+    for optimization_method,is_ecoli_optimized in itertools.product(optimization_methods, ecoli_optimizations):
+        results = run_single_method_ecoli_and_bacillus(
+            # optimization_method="zscore_single_aa_diff",
+            # optimization_method="zscore_single_aa_ratio",
+            optimization_method=optimization_method,
+            optimization_cub_index="CAI",
+            is_ecoli_optimized=is_ecoli_optimized,
+            output_path=f"mcherry-debug-metric-0.3",
+            orf_sequence_file=DEFAULT_SEQUENCE_FILE_PATH,
+            initiation_optimization_method=initiation_type,
+            tuning_param=0.3,
+            # orf_sequence="",
+        )
     # --------------------------------------------------------------------------------------------------
     # Local debugging of a specific coding sequence
-    gene_sequence = "ATGTCTCTAAATTACATCAAAAACTTCTATGAAGGATGTGTTAAACCTCCAACTGTGATTGGTCAATTCCACACCCTTTTCTTTGGATCGATCCGAATATTCTTCCTCGGGGTGCTAGGCTTTGCAGTTTATGGGAATGAGGCCTTGCACTTCATTTGCGATCCAGACAAAAGAGAAGTAAACCTCTTCTGTTACAATCAGTTCAGGCCAATCACTCCACAAGTAAGTTTTTCTGCATTACAACTAGTTATTGTCCTGGTTCCTGGAGCTCTTTTCCACCTTTATGCTGCATGTAAAAGCATCAATCAAGAATGCATTCTTCAAAAGCCTATCTACACTATAATTTATATACTCTCTGTTTTATTAAGAATTAGTCTAGCGGCAATAGCATTCTGGCTTCAGATTTACCTCTTTGGTTTCCAAGTAAAATCTCTTTACCTGTGTGATGCTAGATCTCTTGGGGAAAACATGATTATAAGATGCATGGTTCCAGAACACTTTGAAAAAACCATTTTTCTCATTGCAATAAATACATTTACAACAATTACAATTTTATTATTTGTTGCTGAGATTTTTGAGATCATATTTAGAAGATTATACTTTCCATTCAGACAATGA"
-    results = run_single_method_ecoli_and_bacillus(
-        optimization_method="zscore_single_aa_ratio", #"zscore_bulk_aa_ratio", # "single_wanted_organism"
-        # optimization_method="zscore_bulk_aa_ratio",
-        optimization_cub_index="CAI",       # CAI
-        is_ecoli_optimized=False,
-        output_path=f"debug",
-        orf_sequence=gene_sequence,
-        tuning_param=0.5,
-    )
-    print("Final seq: " + results["final_evaluation"]["final_sequence"])
+    # gene_sequence = "ATGTCTCTAAATTACATCAAAAACTTCTATGAAGGATGTGTTAAACCTCCAACTGTGATTGGTCAATTCCACACCCTTTTCTTTGGATCGATCCGAATATTCTTCCTCGGGGTGCTAGGCTTTGCAGTTTATGGGAATGAGGCCTTGCACTTCATTTGCGATCCAGACAAAAGAGAAGTAAACCTCTTCTGTTACAATCAGTTCAGGCCAATCACTCCACAAGTAAGTTTTTCTGCATTACAACTAGTTATTGTCCTGGTTCCTGGAGCTCTTTTCCACCTTTATGCTGCATGTAAAAGCATCAATCAAGAATGCATTCTTCAAAAGCCTATCTACACTATAATTTATATACTCTCTGTTTTATTAAGAATTAGTCTAGCGGCAATAGCATTCTGGCTTCAGATTTACCTCTTTGGTTTCCAAGTAAAATCTCTTTACCTGTGTGATGCTAGATCTCTTGGGGAAAACATGATTATAAGATGCATGGTTCCAGAACACTTTGAAAAAACCATTTTTCTCATTGCAATAAATACATTTACAACAATTACAATTTTATTATTTGTTGCTGAGATTTTTGAGATCATATTTAGAAGATTATACTTTCCATTCAGACAATGA"
+    # results = run_single_method_ecoli_and_bacillus(
+    #     optimization_method="zscore_single_aa_ratio", #"zscore_bulk_aa_ratio", # "single_wanted_organism"
+    #     # optimization_method="zscore_bulk_aa_ratio",
+    #     optimization_cub_index="CAI",       # CAI
+    #     is_ecoli_optimized=False,
+    #     output_path=f"debug",
+    #     orf_sequence=gene_sequence,
+    #     tuning_param=0.5,
+    # )
+    # print("Final seq: " + results["final_evaluation"]["final_sequence"])
