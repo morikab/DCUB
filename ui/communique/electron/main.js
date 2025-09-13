@@ -1,9 +1,102 @@
 const { app, BrowserWindow, ipcMain, dialog } = require("electron")
 const path = require("path")
+const { spawn, exec } = require('child_process');
+const http = require('http');
 const fs = require("fs").promises
+const fsSync = require('fs');
 const fetch = require("node-fetch")
 
-let mainWindow
+let mainWindow;
+let nextProcess;
+
+// Function to kill processes on port 3000
+function killProcessOnPort(port) {
+  return new Promise((resolve) => {
+    exec(`lsof -ti:${port}`, (error, stdout) => {
+      if (stdout.trim()) {
+        const pids = stdout.trim().split('\n');
+        console.log(`Killing processes on port ${port}: ${pids.join(', ')}`);
+        
+        pids.forEach(pid => {
+          exec(`kill -9 ${pid}`, (killError) => {
+            if (killError) {
+              console.log(`Could not kill process ${pid}:`, killError.message);
+            } else {
+              console.log(`Killed process ${pid}`);
+            }
+          });
+        });
+        
+        // Wait a bit for processes to be killed
+        setTimeout(resolve, 1000);
+      } else {
+        resolve();
+      }
+    });
+  });
+}
+
+// Function to ensure static files are available
+function ensureStaticFiles(projectRoot) {
+  const staticDir = path.join(projectRoot, '.next', 'static');
+  const standaloneStaticDir = path.join(projectRoot, '.next', 'standalone', '.next', 'static');
+  
+  if (!fsSync.existsSync(standaloneStaticDir) && fsSync.existsSync(staticDir)) {
+    console.log('Copying static files to standalone directory...');
+    try {
+      // Create the directory if it doesn't exist
+      fsSync.mkdirSync(path.dirname(standaloneStaticDir), { recursive: true });
+      
+      // Copy static files
+      exec(`cp -r "${staticDir}" "${standaloneStaticDir}"`, (error) => {
+        if (error) {
+          console.error('Failed to copy static files:', error);
+        } else {
+          console.log('Static files copied successfully');
+        }
+      });
+    } catch (err) {
+      console.error('Error copying static files:', err);
+    }
+  }
+}
+
+function waitForServer(url, timeout = 15000) {
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    let attempts = 0;
+
+    const check = () => {
+      attempts++;
+      console.log(`Attempt ${attempts}: Checking server at ${url}`);
+      
+      const req = http.get(url, (res) => {
+        console.log(`Server is ready at ${url} (attempt ${attempts})`);
+        resolve();
+      });
+      
+      req.on('error', (err) => {
+        console.log(`Connection attempt ${attempts} failed:`, err.message);
+        const elapsed = Date.now() - start;
+        
+        if (elapsed > timeout) {
+          console.error(`Server did not start within ${timeout}ms after ${attempts} attempts`);
+          return reject(new Error(`Server did not start within ${timeout}ms: ${err.message}`));
+        }
+        
+        console.log(`Waiting for server... (${elapsed}ms elapsed, attempt ${attempts})`);
+        setTimeout(check, 1000); // retry after 1 second
+      });
+      
+      req.setTimeout(2000, () => {
+        console.log(`Request timeout on attempt ${attempts}`);
+        req.destroy();
+      });
+    };
+
+    check();
+  });
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -16,7 +109,7 @@ function createWindow() {
       contextIsolation: true,
       enableRemoteModule: false,
       preload: path.join(__dirname, "preload.js"),
-      webSecurity: false,  // TODO - remove this after handling file objects properly
+      webSecurity: false,  // TODO - Allow local files
     },
     icon: path.join(__dirname, "assets", "icon.png"), // Add your app icon
     titleBarStyle: "default",
@@ -24,27 +117,118 @@ function createWindow() {
   })
 
   // Load the Next.js app
-  const isDev = process.env.NODE_ENV === "development"
+  mainWindow.loadURL('http://localhost:3000');
+  //const isDev = process.env.NODE_ENV === "development"
 
-  if (isDev) {
-    mainWindow.loadURL("http://localhost:3000")
-    mainWindow.webContents.openDevTools()
-  } else {
-    mainWindow.loadFile(path.join(__dirname, "../out/index.html"))
-  }
+  // if (isDev) {
+  //   mainWindow.loadURL("http://localhost:3000")
+  //   mainWindow.webContents.openDevTools()
+  // } else {
+  //   mainWindow.loadFile(path.join(__dirname, "../out/index.html"))
+  // }
 
   mainWindow.once("ready-to-show", () => {
     mainWindow.show()
   })
 
   mainWindow.on("closed", () => {
+    shutdown();
     mainWindow = null
   })
 }
 
-app.whenReady().then(createWindow)
+// Kill the Next.js server when Electron quits
+const shutdown = () => {
+  if (nextProcess) {
+    nextProcess.kill();
+    nextProcess = null;
+  }
+};
+
+// app.whenReady().then(createWindow)
+app.on('ready', async () => {
+  try {
+    // Check if standalone server exists
+    const standaloneServer = path.join(__dirname, '..', '.next', 'standalone', 'server.js');
+    const fs = require('fs');
+    
+    if (!fs.existsSync(standaloneServer)) {
+      console.error('Standalone server not found. Please run "npm run build" first.');
+      app.quit();
+      return;
+    }
+
+    console.log('Starting Next.js standalone server...');
+    
+    // Kill any existing processes on port 3000
+    await killProcessOnPort(3000);
+    
+    // The standalone server needs to be run from the project root to access static files
+    const projectRoot = path.join(__dirname, '..');
+    
+    // Ensure static files are available
+    ensureStaticFiles(projectRoot);
+    
+    // Start the standalone server with environment variables
+    nextProcess = spawn('node', [standaloneServer], {
+      cwd: projectRoot,  // Run from project root, not standalone directory
+      shell: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: {
+        ...process.env,
+        PORT: '3000',
+        HOSTNAME: '127.0.0.1',  // Force IPv4
+        NODE_OPTIONS: '--dns-result-order=ipv4first'  // Prefer IPv4
+      }
+    });
+
+    // Handle process output
+    nextProcess.stdout.on('data', (data) => {
+      const output = data.toString().trim();
+      console.log(`Next.js stdout: ${output}`);
+      
+      // Check for server ready message
+      if (output.includes('Ready') || output.includes('started server') || output.includes('Local:')) {
+        console.log('Server appears to be ready based on output');
+      }
+    });
+
+    nextProcess.stderr.on('data', (data) => {
+      const output = data.toString().trim();
+      console.error(`Next.js stderr: ${output}`);
+      
+      // Check for specific errors
+      if (output.includes('EADDRINUSE')) {
+        console.error('Port 3000 is already in use!');
+      } else if (output.includes('ECONNREFUSED')) {
+        console.error('Connection refused - server may not be starting properly');
+      }
+    });
+
+    nextProcess.on('error', (err) => {
+      console.error('Failed to start Next.js server:', err);
+      app.quit();
+    });
+
+    nextProcess.on('exit', (code) => {
+      if (code !== 0) {
+        console.error(`Next.js server exited with code ${code}`);
+        app.quit();
+      }
+    });
+    
+    // Wait for server to be ready
+    await waitForServer('http://localhost:3000');
+    createWindow();
+    
+  } catch (err) {
+    console.error('Failed to start application:', err);
+    app.quit();
+  }
+});
 
 app.on("window-all-closed", () => {
+  shutdown();
   if (process.platform !== "darwin") {
     app.quit()
   }
