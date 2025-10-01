@@ -72,9 +72,13 @@ def generate_testing_data(
     assert output_path is not None, "should provide an output path"
     output_path = os.path.join("results", output_path)
     initiation_optimization_method = initiation_optimization_method or "original"
-    output_directory = os.path.join(output_path, F"{orf_optimization_cub_index}_{orf_optimization_method}_"
-                                                 F"wanted_{len(wanted_hosts)}_unwanted_{len(unwanted_hosts)}_"
-                                                 F"{generate_random_string(4)}")
+    output_directory = os.path.join(
+        output_path, 
+        orf_optimization_cub_index, 
+        orf_optimization_method,
+        F"wanted_{len(wanted_hosts)}_unwanted_{len(unwanted_hosts)}",
+        F"{generate_random_string(4)}",
+    )
     # Path(output_directory).mkdir(parents=True, exist_ok=True)
     input_dict = {
         "sequence_file_path": sequence_file_path,
