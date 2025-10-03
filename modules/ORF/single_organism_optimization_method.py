@@ -57,13 +57,11 @@ def _get_optimal_codons(
     optimization_method: models.ORFOptimizationMethod,
     optimization_cub_index: models.ORFOptimizationCubIndex,
 ) -> dict[str, str]:
-    # TODO - check if we can use here jit (after debugging)
     wanted_organisms = [o for o in organisms if o.is_optimized]
     wanted_organisms_count = len(wanted_organisms)
     if wanted_organisms_count != 1:
-        logger.error(f"Number of wanted organisms is {wanted_organisms_count} and is not suitable for the current "
-                     f"optimization method {optimization_method}")
-        raise ValueError(f"Invalid number of wanted organisms for {optimization_method} optimization method.")
+        logger.warning(f"Number of wanted organisms is {wanted_organisms_count} for the current optimization method "
+                       f"{optimization_method}. Optimizing based on the first wanted organism.")
     wanted_organism = wanted_organisms[0]
     aa_to_optimal_codon = {}
     for aa, codons in shared_functions_and_vars.synonymous_codons.items():
