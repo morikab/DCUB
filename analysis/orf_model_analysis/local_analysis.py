@@ -268,9 +268,10 @@ if __name__ == "__main__":
             optimization_method=optimization_method,
             optimization_cub_index="CAI",
             is_ecoli_optimized=is_ecoli_optimized,
-            output_path=f"mcherry-debug-metric",
+            output_path=f"mcherry-debug-metric-0.3",
             orf_sequence_file=DEFAULT_SEQUENCE_FILE_PATH,
             initiation_optimization_method=initiation_type,
+            tuning_param=0.3,
             # orf_sequence="",
         )
     # --------------------------------------------------------------------------------------------------
