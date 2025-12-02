@@ -1,7 +1,8 @@
 {
-  "name": "commuique-electron",
+  "name": "DCUB-electron",
   "version": "1.0.0",
-  "description": "Commuique Desktop Application",
+  "description": "DCUB Desktop Application",
+  "author": "Moran Kama",
   "main": "main.js",
   "scripts": {
     "electron": "electron .",
@@ -11,12 +12,21 @@
     "pack": "electron-builder --dir"
   },
   "build": {
-    "appId": "com.commuique.app",
-    "productName": "commuique",
+    "appId": "com.dcub.app",
+    "productName": "DCUB",
     "directories": {
       "output": "dist"
     },
     "files": ["main.js", "preload.js", "../out/**/*", "assets/**/*"],
+    "extraResources": [
+      {
+        "from": "backend/",
+        "to": ".",
+        "filter": [
+          "fastapi_server"
+        ]
+      }
+    ],
     "mac": {
       "category": "public.app-category.developer-tools",
       "target": "dmg"
@@ -29,10 +39,10 @@
     }
   },
   "dependencies": {
-    "electron": "^27.0.0",
     "node-fetch": "^2.7.0"
   },
   "devDependencies": {
+    "electron": "^27.0.0",
     "electron-builder": "^24.6.4"
   }
 }

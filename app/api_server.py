@@ -4,6 +4,7 @@ from pydantic import BaseModel
 from typing import Any, Dict
 import sys
 import os
+import uvicorn
 
 # Ensure modules can be imported
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -37,3 +38,7 @@ def run_modules_endpoint(request: RunModulesRequest):
         return RunModulesResponse(result=result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) 
+
+
+if __name__ == "__main__":
+    uvicorn.run(app, host="127.0.0.1", port=8000)

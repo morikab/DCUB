@@ -1,8 +1,8 @@
 {
-  "name": "commuique",
+  "name": "DCUB",
   "version": "0.1.0",
   "private": true,
-  "description": "DNA sequence optimization tool using GenBank genome files",
+  "description": "Differential Codon Usage Bias (DCUB) tool",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

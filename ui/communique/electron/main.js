@@ -8,6 +8,7 @@ const fetch = require("node-fetch")
 
 let mainWindow;
 let nextProcess;
+let backendProcess;
 
 // Function to kill processes on port 3000
 function killProcessOnPort(port) {
@@ -117,17 +118,75 @@ function createWindow() {
   })
 }
 
-// Kill the Next.js server when Electron quits
+// Kill child processes when Electron quits
 const shutdown = () => {
   if (nextProcess) {
     nextProcess.kill();
     nextProcess = null;
   }
+  if (backendProcess) {
+    backendProcess.kill();
+    backendProcess = null;
+  }
 };
+
+// Start FastAPI backend server as a child process
+async function startBackendServer() {
+  try {
+    // Path to packaged FastAPI backend executable, relative to this file
+    const isDev = !app.isPackaged;
+
+    const basePath = isDev
+      ? path.join(__dirname, "../backend")
+      : process.resourcesPath;
+
+    const backendExecutable = path.join(basePath, "fastapi_server");
+    
+    // FIXMW
+    // switch (process.platform) {
+    //   case "darwin": return path.join(basePath, "fastapi_server_macos");
+    //   case "win32":  return path.join(basePath, "fastapi_server_win.exe");
+    //   case "linux":  return path.join(basePath, "fastapi_server_linux");
+    // }
+    
+
+    console.log("Starting FastAPI backend executable...", { backendExecutable });
+
+    backendProcess = spawn(backendExecutable, [], {
+      cwd: path.dirname(backendExecutable),
+      shell: false,
+      stdio: ["ignore", "pipe", "pipe"],
+      env: {
+        ...process.env,
+      },
+    });
+
+    backendProcess.stdout.on("data", (data) => {
+      console.log(`FastAPI stdout: ${data.toString().trim()}`);
+    });
+
+    backendProcess.stderr.on("data", (data) => {
+      console.error(`FastAPI stderr: ${data.toString().trim()}`);
+    });
+
+    backendProcess.on("error", (err) => {
+      console.error("Failed to start FastAPI backend executable:", err);
+    });
+
+    backendProcess.on("exit", (code) => {
+      console.log(`FastAPI backend executable exited with code ${code}`);
+    });
+  } catch (err) {
+    console.error("Error while starting FastAPI backend executable:", err);
+  }
+}
 
 // app.whenReady().then(createWindow)
 app.on('ready', async () => {
   try {
+    // Start Python FastAPI backend in parallel
+    await startBackendServer();
+
     const projectRoot = path.join(__dirname, '..');
     const distDir = path.join(projectRoot, '.next');
     const standaloneDir = path.join(distDir, 'standalone');
