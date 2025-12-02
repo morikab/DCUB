@@ -36,33 +36,13 @@ function killProcessOnPort(port) {
   });
 }
 
-// Function to ensure static files are available
-function ensureStaticFiles(projectRoot) {
-  const staticDir = path.join(projectRoot, '.next', 'static');
-  const standaloneStaticDir = path.join(projectRoot, '.next', 'standalone', '.next', 'static');
-  
-  if (!fsSync.existsSync(standaloneStaticDir) && fsSync.existsSync(staticDir)) {
-    console.log('Copying static files to standalone directory...');
-    try {
-      // Create the directory if it doesn't exist
-      fsSync.mkdirSync(path.dirname(standaloneStaticDir), { recursive: true });
-      
-      // Copy static files
-      exec(`cp -r "${staticDir}" "${standaloneStaticDir}"`, (error) => {
-        if (error) {
-          console.error('Failed to copy static files:', error);
-        } else {
-          console.log('Static files copied successfully');
-        }
-      });
-    } catch (err) {
-      console.error('Error copying static files:', err);
-    }
-  }
-}
-
 function waitForServer(url, timeout = 15000) {
   return new Promise((resolve, reject) => {
+    // Force IPv4 to avoid localhost resolving to ::1 on some systems
+    if (url.includes('localhost')) {
+      url = url.replace('localhost', '127.0.0.1')
+    }
+
     const start = Date.now();
     let attempts = 0;
 
@@ -116,8 +96,8 @@ function createWindow() {
     show: false,
   })
 
-  // Load the Next.js app
-  mainWindow.loadURL('http://localhost:3000');
+  // Load the Next.js app (force IPv4)
+  mainWindow.loadURL('http://127.0.0.1:3000');
   //const isDev = process.env.NODE_ENV === "development"
 
   // if (isDev) {
@@ -148,12 +128,20 @@ const shutdown = () => {
 // app.whenReady().then(createWindow)
 app.on('ready', async () => {
   try {
-    // Check if standalone server exists
-    const standaloneServer = path.join(__dirname, '..', '.next', 'standalone', 'server.js');
-    const fs = require('fs');
-    
-    if (!fs.existsSync(standaloneServer)) {
+    const projectRoot = path.join(__dirname, '..');
+    const distDir = path.join(projectRoot, '.next');
+    const standaloneDir = path.join(distDir, 'standalone');
+    const embeddedNextDir = path.join(standaloneDir, '.next');
+    const standaloneServer = path.join(standaloneDir, 'server.js');
+
+    if (!fsSync.existsSync(standaloneServer)) {
       console.error('Standalone server not found. Please run "npm run build" first.');
+      app.quit();
+      return;
+    }
+
+    if (!fsSync.existsSync(embeddedNextDir)) {
+      console.error('Missing ".next/standalone/.next" assets. Run "npm run copy-standalone-next" first.');
       app.quit();
       return;
     }
@@ -163,15 +151,9 @@ app.on('ready', async () => {
     // Kill any existing processes on port 3000
     await killProcessOnPort(3000);
     
-    // The standalone server needs to be run from the project root to access static files
-    const projectRoot = path.join(__dirname, '..');
-    
-    // Ensure static files are available
-    ensureStaticFiles(projectRoot);
-    
     // Start the standalone server with environment variables
     nextProcess = spawn('node', [standaloneServer], {
-      cwd: projectRoot,  // Run from project root, not standalone directory
+      cwd: standaloneDir,
       shell: true,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {

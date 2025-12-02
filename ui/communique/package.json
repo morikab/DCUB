@@ -8,9 +8,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "electron": "electron electron/main.js",
-    "electron-dev": "npm run build && npm run copy-static && electron electron/main.js",
-    "copy-static": "cp -r .next/static .next/standalone/.next/ 2>/dev/null || true"
+    "electron": "npm --prefix electron run electron",
+    "electron-dev": "npm run build && npm run copy-standalone-next && npm --prefix electron run electron",
+    "copy-standalone-next": "node scripts/copy-standalone-next.js"
   },
   "dependencies": {
     "@radix-ui/react-label": "^2.1.7",
