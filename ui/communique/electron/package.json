@@ -20,11 +20,15 @@
     "files": ["main.js", "preload.js", "../out/**/*", "assets/**/*"],
     "extraResources": [
       {
-        "from": "backend/",
+        "from": "../backend/",
         "to": ".",
         "filter": [
           "fastapi_server"
         ]
+      },
+      {
+        "from": "../.next/standalone",
+        "to": ".next/standalone"
       }
     ],
     "mac": {
