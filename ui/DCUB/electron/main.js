@@ -99,14 +99,6 @@ function createWindow() {
 
   // Load the Next.js app (force IPv4)
   mainWindow.loadURL('http://127.0.0.1:3000');
-  //const isDev = process.env.NODE_ENV === "development"
-
-  // if (isDev) {
-  //   mainWindow.loadURL("http://localhost:3000")
-  //   mainWindow.webContents.openDevTools()
-  // } else {
-  //   mainWindow.loadFile(path.join(__dirname, "../out/index.html"))
-  // }
 
   mainWindow.once("ready-to-show", () => {
     mainWindow.show()
@@ -140,7 +132,7 @@ async function startBackendServer() {
       ? path.join(__dirname, "../backend")
       : process.resourcesPath;
 
-    const backendExecutable = path.join(basePath, "fastapi_server");
+    const backendExecutable = path.join(basePath, "fastapi_server", "fastapi_server");
     
     // FIXMW
     // switch (process.platform) {

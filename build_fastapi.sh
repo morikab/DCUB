@@ -11,11 +11,15 @@ EOF
 echo "Using genetic_code_ncbi.csv at: $csv_path"
 
 pyinstaller \
-  --onefile \
+  --onedir \
   --name fastapi_server \
   --add-data="${csv_path}:codonbias" \
   --add-data="app/modules/configuration.yaml:modules" \
   app/api_server.py
-  # --add-data "app/modules/configuration.yaml:modules" \
   
 
+backend_path="ui/DCUB/backend"
+echo "Copying backend executable to: $backend_path"
+# Create backend directory if it does not exist and copy the executable there
+mkdir -p $backend_path
+cp -r dist/fastapi_server $backend_path/fastapi_server
