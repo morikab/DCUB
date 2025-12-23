@@ -9,6 +9,23 @@ const fetch = require("node-fetch")
 let mainWindow;
 let nextProcess;
 let backendProcess;
+const childProcesses = new Set();
+
+function cleanupChildProcesses() {
+  console.log('Cleaning up child processes...');
+  for (const process of childProcesses) {
+    if (!process.killed) {
+      console.log(`Killing child process with PID: ${process.pid}`);
+      process.kill('SIGKILL');
+    }
+  }
+  childProcesses.clear();
+}
+
+process.on("SIGTERM", cleanupChildProcesses);
+process.on("SIGINT", cleanupChildProcesses);
+process.on("exit", cleanupChildProcesses);
+process.on("uncaughtException", cleanupChildProcesses);
 
 function trace(msg) {
   fsSync.appendFileSync("/tmp/electron-trace.txt", `[${Date.now()}] ${msg}\n`);
@@ -172,22 +189,10 @@ function createWindow() {
   })
 
   mainWindow.on("closed", () => {
-    shutdown();
+    cleanupChildProcesses();
     mainWindow = null
   })
 }
-
-// Kill child processes when Electron quits
-const shutdown = () => {
-  if (nextProcess) {
-    nextProcess.kill();
-    nextProcess = null;
-  }
-  if (backendProcess) {
-    backendProcess.kill();
-    backendProcess = null;
-  }
-};
 
 // Start FastAPI backend server as a child process
 async function startBackendServer() {
@@ -219,6 +224,7 @@ async function startBackendServer() {
         ...process.env,
       },
     });
+    childProcesses.add(backendProcess);
 
     backendProcess.stdout.on("data", (data) => {
       console.log(`FastAPI stdout: ${data.toString().trim()}`);
@@ -234,6 +240,7 @@ async function startBackendServer() {
 
     backendProcess.on("exit", (code) => {
       console.log(`FastAPI backend executable exited with code ${code}`);
+      backendProcess = null;
     });
   } catch (err) {
     console.error("Error while starting FastAPI backend executable:", err);
@@ -288,15 +295,7 @@ app.on('ready', async () => {
     env.PORT = '3000';
     env.HOSTNAME = '127.0.0.1';  // Force IPv4
     
-    // Ensure PATH includes common directories for Finder launches
-    // if (app.isPackaged && process.platform === 'darwin') {
-    //   const commonPaths = ['/usr/local/bin', '/usr/bin', '/bin', '/opt/homebrew/bin'];
-    //   const currentPath = env.PATH || '';
-    //   env.PATH = [...commonPaths, currentPath].join(':');
-    // }
-    
     console.log('Spawning Next.js server:', { absoluteStandaloneServer, absoluteStandaloneDir });
-    
     nextProcess = spawn(process.execPath, [absoluteStandaloneServer], {
       cwd: absoluteStandaloneDir,
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -305,6 +304,7 @@ app.on('ready', async () => {
         ELECTRON_RUN_AS_NODE: '1',
       }
     });
+    childProcesses.add(nextProcess);
     trace("next spawn called");
 
     // Handle process output
@@ -337,9 +337,9 @@ app.on('ready', async () => {
     });
 
     nextProcess.on('exit', (code) => {
+      cpnsole.log('Next.js server exited with code:', code)
+      nextProcess = null;
       if (code !== 0) {
-        console.error(`Next.js server exited with code ${code}`);
-        fsSync.writeFileSync('/tmp/electron-window-started.txt', `Next.js server exited with code ${code}`);
         app.quit();
       }
     });
@@ -359,11 +359,13 @@ app.on('ready', async () => {
 });
 
 app.on("window-all-closed", () => {
-  shutdown();
-  if (process.platform !== "darwin") {
-    app.quit()
-  }
+  cleanupChildProcesses();
+  app.quit()
 })
+
+app.on("before-quit", () => {
+  cleanupChildProcesses();
+});
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
