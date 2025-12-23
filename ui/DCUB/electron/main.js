@@ -10,6 +10,10 @@ let mainWindow;
 let nextProcess;
 let backendProcess;
 
+function trace(msg) {
+  fsSync.appendFileSync("/tmp/electron-trace.txt", `[${Date.now()}] ${msg}\n`);
+}
+
 // Function to kill processes on port 3000
 function killProcessOnPort(port) {
   return new Promise((resolve) => {
@@ -46,33 +50,94 @@ function waitForServer(url, timeout = 15000) {
 
     const start = Date.now();
     let attempts = 0;
+    let currentRequest = null;
+    let timeoutId = null;
+    let isResolved = false;
+
+    const cleanup = () => {
+      if (currentRequest) {
+        currentRequest.removeAllListeners();
+        currentRequest.destroy();
+        currentRequest = null;
+      }
+      if (timeoutId) {
+        clearTimeout(timeoutId);
+        timeoutId = null;
+      }
+    };
 
     const check = () => {
+      if (isResolved) return;
+      
       attempts++;
-      console.log(`Attempt ${attempts}: Checking server at ${url}`);
       
-      const req = http.get(url, (res) => {
-        console.log(`Server is ready at ${url} (attempt ${attempts})`);
-        resolve();
-      });
+      // Cleanup any previous request
+      cleanup();
       
-      req.on('error', (err) => {
-        console.log(`Connection attempt ${attempts} failed:`, err.message);
-        const elapsed = Date.now() - start;
+      try {
+        currentRequest = http.get(url, (res) => {
+          if (isResolved) return;
+          isResolved = true;
+          cleanup();
+          resolve();
+        });
         
-        if (elapsed > timeout) {
-          console.error(`Server did not start within ${timeout}ms after ${attempts} attempts`);
-          return reject(new Error(`Server did not start within ${timeout}ms: ${err.message}`));
+        currentRequest.on('error', (err) => {
+          if (isResolved) return;
+          
+          cleanup();
+          
+          const elapsed = Date.now() - start;
+          
+          if (elapsed > timeout) {
+            isResolved = true;
+            reject(new Error(`Server did not start within ${timeout}ms after ${attempts} attempts: ${err.message}`));
+            return;
+          }
+          
+          // Retry after 1 second
+          timeoutId = setTimeout(() => {
+            if (!isResolved) {
+              check();
+            }
+          }, 1000);
+        });
+        
+        // Set request timeout
+        currentRequest.setTimeout(2000, () => {
+          if (isResolved || !currentRequest) return;
+          
+          cleanup();
+          
+          const elapsed = Date.now() - start;
+          
+          if (elapsed > timeout) {
+            isResolved = true;
+            reject(new Error(`Server did not start within ${timeout}ms after ${attempts} attempts: request timeout`));
+            return;
+          }
+          
+          // Retry after 1 second
+          timeoutId = setTimeout(() => {
+            if (!isResolved) {
+              check();
+            }
+          }, 1000);
+        });
+        
+        // Handle abort/close
+        currentRequest.on('close', () => {
+          if (isResolved || !currentRequest) return;
+          cleanup();
+        });
+        
+      } catch (err) {
+        cleanup();
+        if (!isResolved) {
+          isResolved = true;
+          reject(new Error(`Failed to check server: ${err.message}`));
         }
-        
-        console.log(`Waiting for server... (${elapsed}ms elapsed, attempt ${attempts})`);
-        setTimeout(check, 1000); // retry after 1 second
-      });
-      
-      req.setTimeout(2000, () => {
-        console.log(`Request timeout on attempt ${attempts}`);
-        req.destroy();
-      });
+      }
     };
 
     check();
@@ -97,11 +162,13 @@ function createWindow() {
     show: false,
   })
 
-  // Load the Next.js app (force IPv4)
-  mainWindow.loadURL('http://127.0.0.1:3000');
+  mainWindow.loadFile(
+    path.join(__dirname, "loading.html")
+  );
 
   mainWindow.once("ready-to-show", () => {
-    mainWindow.show()
+    mainWindow.show();
+    mainWindow.focus();
   })
 
   mainWindow.on("closed", () => {
@@ -175,10 +242,8 @@ async function startBackendServer() {
 
 // app.whenReady().then(createWindow)
 app.on('ready', async () => {
+  trace("app ready event fired");
   try {
-    // Start Python FastAPI backend in parallel
-    await startBackendServer();
-
     const projectRoot = path.join(__dirname, '..');
     const distDir = path.join(projectRoot, '.next');
     const standaloneDir = path.join(distDir, 'standalone');
@@ -197,26 +262,54 @@ app.on('ready', async () => {
       return;
     }
 
+    createWindow();
+    trace("window created");
+
     console.log('Starting Next.js standalone server...');
-    
     // Kill any existing processes on port 3000
     await killProcessOnPort(3000);
     
-    // Start the standalone server with environment variables
-    nextProcess = spawn('node', [standaloneServer], {
-      cwd: standaloneDir,
-      shell: true,
+    // Start the standalone server using Electron's Node.js runtime
+    // Use absolute paths to avoid PATH issues when launched from Finder
+    const absoluteStandaloneServer = path.resolve(standaloneServer);
+    const absoluteStandaloneDir = path.resolve(standaloneDir);
+    
+    // Build environment variables - explicitly remove NODE_OPTIONS in packaged apps
+    const env = { ...process.env };
+    
+    // Remove NODE_OPTIONS in packaged apps (Electron's Node.js doesn't support it)
+    if (app.isPackaged) {
+      delete env.NODE_OPTIONS;
+    } else {
+      // Only set NODE_OPTIONS in dev mode
+      env.NODE_OPTIONS = '--dns-result-order=ipv4first';
+    }
+    
+    env.PORT = '3000';
+    env.HOSTNAME = '127.0.0.1';  // Force IPv4
+    
+    // Ensure PATH includes common directories for Finder launches
+    // if (app.isPackaged && process.platform === 'darwin') {
+    //   const commonPaths = ['/usr/local/bin', '/usr/bin', '/bin', '/opt/homebrew/bin'];
+    //   const currentPath = env.PATH || '';
+    //   env.PATH = [...commonPaths, currentPath].join(':');
+    // }
+    
+    console.log('Spawning Next.js server:', { absoluteStandaloneServer, absoluteStandaloneDir });
+    
+    nextProcess = spawn(process.execPath, [absoluteStandaloneServer], {
+      cwd: absoluteStandaloneDir,
       stdio: ['ignore', 'pipe', 'pipe'],
       env: {
-        ...process.env,
-        PORT: '3000',
-        HOSTNAME: '127.0.0.1',  // Force IPv4
-        NODE_OPTIONS: '--dns-result-order=ipv4first'  // Prefer IPv4
+        ...env,
+        ELECTRON_RUN_AS_NODE: '1',
       }
     });
+    trace("next spawn called");
 
     // Handle process output
     nextProcess.stdout.on('data', (data) => {
+      trace("next stdout first chunk");
       const output = data.toString().trim();
       console.log(`Next.js stdout: ${output}`);
       
@@ -246,13 +339,18 @@ app.on('ready', async () => {
     nextProcess.on('exit', (code) => {
       if (code !== 0) {
         console.error(`Next.js server exited with code ${code}`);
+        fsSync.writeFileSync('/tmp/electron-window-started.txt', `Next.js server exited with code ${code}`);
         app.quit();
       }
     });
-    
+    trace("waitForServer started");
     // Wait for server to be ready
-    await waitForServer('http://localhost:3000');
-    createWindow();
+    await waitForServer('http://127.0.0.1:3000');
+    trace("waitForServer resolved");
+    mainWindow.loadURL("http://127.0.0.1:3000");
+    trace("loadURL called");
+    // Start Python FastAPI backend in parallel
+    await startBackendServer();
     
   } catch (err) {
     console.error('Failed to start application:', err);
@@ -270,6 +368,9 @@ app.on("window-all-closed", () => {
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     createWindow()
+  } else {
+    mainWindow.show();
+    mainWindow.focus();
   }
 })
 

@@ -22,4 +22,6 @@ backend_path="ui/DCUB/backend"
 echo "Copying backend executable to: $backend_path"
 # Create backend directory if it does not exist and copy the executable there
 mkdir -p $backend_path
+echo "Removing previous executable if exists from: $backend_path"
+rm -rf $backend_path/fastapi_server
 cp -r dist/fastapi_server $backend_path/fastapi_server

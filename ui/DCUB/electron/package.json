@@ -17,7 +17,7 @@
     "directories": {
       "output": "dist"
     },
-    "files": ["main.js", "preload.js", "../out/**/*", "assets/**/*"],
+    "files": ["main.js", "preload.js", "loading.html", "../out/**/*", "assets/**/*"],
     "extraResources": [
       {
         "from": "../backend/",
