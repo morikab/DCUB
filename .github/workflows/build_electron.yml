@@ -1,12 +1,30 @@
-name: Build DCUB Desktop App
+name: Build DCUB Desktop Apps
 
 on:
   workflow_dispatch:
+    inputs:
+      build_macos:
+        description: "Build macOS app"
+        required: true
+        default: "true"
+      build_linux:
+        description: "Build Linux app"
+        required: true
+        default: "true"
+      build_windows:
+        description: "Build Windows app"
+        required: true
+        default: "true"
 
 jobs:
-  build-macos:  # TODO - extend for linux and windows 
+  # ==================================================
+  # macOS build
+  # ==================================================
+  build-macos:
+    if: ${{ github.event.inputs.build_macos == 'true' }}
     name: Build macOS Electron App
     runs-on: macos-latest
+    continue-on-error: true
 
     steps:
       # --------------------------------------------------
@@ -102,3 +120,196 @@ jobs:
           name: DCUB-macOS-build
           path: |
             ui/DCUB/electron/dist/*.dmg
+
+  # ==================================================
+  # Linux build
+  # ==================================================
+  build-linux:
+    if: ${{ github.event.inputs.build_linux == 'true' }}
+    name: Build Linux Electron App
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+      # --------------------------------------------------
+      # 1. Checkout repository
+      # --------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --------------------------------------------------
+      # 2. Set up Node.js
+      # --------------------------------------------------
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 23.11.0
+          cache: npm
+          cache-dependency-path: |
+            ui/DCUB/package-lock.json
+            ui/DCUB/electron/package-lock.json
+      
+      # --------------------------------------------------
+      # 3. Set up Python (for FastAPI build)
+      # --------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+          cache: "pip"
+          cache-dependency-path: |
+            app/requirements.txt
+
+      # --------------------------------------------------
+      # 4. Install Electron System dependencies
+      # --------------------------------------------------
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgtk-3-dev libnss3 libxss1 libasound2
+
+      # --------------------------------------------------
+      # 5. Install Python dependencies
+      # --------------------------------------------------
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      # --------------------------------------------------
+      # 6. Build standalone FastAPI server
+      # --------------------------------------------------
+      - name: Build FastAPI backend
+        run: |
+          chmod +x build_fastapi.sh
+          ./build_fastapi.sh
+
+      # --------------------------------------------------
+      # 7. Install UI dependencies
+      # --------------------------------------------------
+      - name: Install UI dependencies
+        working-directory: ui/DCUB
+        run: npm ci
+
+      # --------------------------------------------------
+      # 8. Install Electron dependencies
+      # --------------------------------------------------
+      - name: Install Electron dependencies
+        working-directory: ui/DCUB/electron
+        run: npm ci
+
+      # --------------------------------------------------
+      # 9. Build Next.js UI + prepare Electron assets
+      # --------------------------------------------------
+      - name: Build web UI for Electron
+        working-directory: ui/DCUB
+        run: npm run electron-build
+
+      # --------------------------------------------------
+      # 10. Build Electron desktop application
+      # --------------------------------------------------
+      - name: Build Electron app
+        working-directory: ui/DCUB/electron
+        run: npm run build-electron -- --linux
+
+      # --------------------------------------------------
+      # 11. Upload Electron build artifacts
+      # --------------------------------------------------
+      - name: Upload Electron artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DCUB-Linux-build
+          path: |
+            ui/DCUB/electron/dist/*.AppImage
+            ui/DCUB/electron/dist/*.deb
+
+  # ==================================================
+  # Windows build
+  # ==================================================
+  build-windows:
+    if: ${{ github.event.inputs.build_windows == 'true' }}
+    name: Build Windows Electron App
+    runs-on: windows-latest
+    continue-on-error: true
+
+    steps:
+      # --------------------------------------------------
+      # 1. Checkout repository
+      # --------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --------------------------------------------------
+      # 2. Set up Node.js
+      # --------------------------------------------------
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 23.11.0
+          cache: npm
+          cache-dependency-path: |
+            ui/DCUB/package-lock.json
+            ui/DCUB/electron/package-lock.json
+      
+      # --------------------------------------------------
+      # 3. Set up Python (for FastAPI build)
+      # --------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.9"
+          cache: "pip"
+          cache-dependency-path: |
+            app/requirements.txt
+
+      # --------------------------------------------------
+      # 4. Install Python dependencies
+      # --------------------------------------------------
+      - name: Install Python dependencies
+        run: |
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      # --------------------------------------------------
+      # 6. Build standalone FastAPI server
+      # --------------------------------------------------
+      - name: Build FastAPI backend
+        run: |
+          build_fastapi.bat  
+
+      # --------------------------------------------------
+      # 7. Install UI dependencies
+      # --------------------------------------------------
+      - name: Install UI dependencies
+        working-directory: ui/DCUB
+        run: npm ci
+
+      # --------------------------------------------------
+      # 8. Install Electron dependencies
+      # --------------------------------------------------
+      - name: Install Electron dependencies
+        working-directory: ui/DCUB/electron
+        run: npm ci
+
+      # --------------------------------------------------
+      # 9. Build Next.js UI + prepare Electron assets
+      # --------------------------------------------------
+      - name: Build web UI for Electron
+        working-directory: ui/DCUB
+        run: npm run electron-build
+
+      # --------------------------------------------------
+      # 10. Build Electron desktop application
+      # --------------------------------------------------
+      - name: Build Electron app
+        working-directory: ui/DCUB/electron
+        run: npm run build-electron -- --win
+
+      # --------------------------------------------------
+      # 11. Upload Electron build artifacts
+      # --------------------------------------------------
+      - name: Upload Windows installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: DCUB-Windows-build
+          path: ui/DCUB/electron/dist/*.exe
