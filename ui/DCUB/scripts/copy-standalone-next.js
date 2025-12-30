@@ -3,7 +3,7 @@ const path = require('path')
 
 const fsp = fs.promises
 
-const projectRoot = process.cwd()
+const projectRoot = path.join(__dirname, '..')
 const nextDir = path.join(projectRoot, '.next')
 const standaloneDir = path.join(nextDir, 'standalone')
 const destNextDir = path.join(standaloneDir, '.next')
