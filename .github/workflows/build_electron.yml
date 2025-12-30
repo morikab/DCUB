@@ -101,4 +101,4 @@ jobs:
         with:
           name: DCUB-macOS-build
           path: |
-            ui/DCUB/electron/dist/**
+            ui/DCUB/electron/dist/*.dmg
