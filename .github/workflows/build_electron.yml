@@ -23,6 +23,7 @@ jobs:
         with:
           node-version: 23.11.0
           cache: npm
+          cache-dependency-path: ui/DCUB/package-lock.json
 
       # --------------------------------------------------
       # 3. Set up Python (for FastAPI build)
