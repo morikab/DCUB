@@ -36,6 +36,7 @@ __pycache__/
 *.py[cod]
 *.pyo
 *.pyd
+.ipynb_checkpoints/
 
 # Virtual environments
 .env
