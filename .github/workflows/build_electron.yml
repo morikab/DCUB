@@ -276,7 +276,6 @@ jobs:
       - name: Build FastAPI backend
         run: |
           build_fastapi.bat  
-    # TODO - need to update the script here
 
       # --------------------------------------------------
       # 7. Install UI dependencies
