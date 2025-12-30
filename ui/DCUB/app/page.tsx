@@ -89,7 +89,7 @@ export default function DNAOptimizerPage() {
           orf_optimization_method: currentState.optimizationMethod,
           orf_optimization_cub_index: currentState.cubIndex,
           initiation_optimization_method: "original",
-          output_path: `results/commuique/${Date.now()}`,
+          output_path: `results/DCUB/${Date.now()}`,
           evaluation_score: "average_distance",
         },
       }
@@ -222,7 +222,8 @@ export default function DNAOptimizerPage() {
       <div className="max-w-6xl mx-auto space-y-6">
         {/* Header */}
         <div className="text-center space-y-2">
-          <h1 className="text-4xl font-bold text-gray-900">Commuique</h1>
+          <h1 className="text-4xl font-bold text-gray-900">DCUB</h1>
+          <h1 className="text-xl font-bold text-gray-600">Your Differential Codon Usage Bias tool!</h1>
           <p className="text-lg text-gray-600 max-w-2xl mx-auto">
             Configure your DNA sequence optimization parameters by specifying target organisms, priorities, and
             expression data for comprehensive genetic optimization using GenBank genome files.

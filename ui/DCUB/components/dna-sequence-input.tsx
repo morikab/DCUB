@@ -163,7 +163,7 @@ export function DnaSequenceInput() {
   }
 
   const downloadSampleFasta = () => {
-    const sampleFasta = `>Sample DNA Sequence for Commuique Optimization
+    const sampleFasta = `>Sample DNA Sequence for DCUB Optimization
 ATGAAAGTTCTGTTCCAGGGCCCGCCCGCGCCGCTGCTGCTGCTGCTGCTGCTGCTGCTG
 CTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTG
 CTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTG

@@ -167,6 +167,8 @@ function createWindow() {
     height: 900,
     minWidth: 800,
     minHeight: 600,
+    backgroundColor: "#252525",
+    autoHideMenuBar: true,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
