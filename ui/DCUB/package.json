@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "electron": "npm --prefix electron run electron",
+    "electron-build": "npm run build && npm run copy-standalone-next",
     "electron-dev": "npm run build && npm run copy-standalone-next && npm --prefix electron run electron",
     "copy-standalone-next": "node scripts/copy-standalone-next.js"
   },

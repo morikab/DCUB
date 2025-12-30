@@ -84,7 +84,7 @@ jobs:
       # --------------------------------------------------
       - name: Build web UI for Electron
         working-directory: ui/DCUB
-        run: npm run electron-dev
+        run: npm run electron-build
 
       # --------------------------------------------------
       # 10. Build Electron desktop application
