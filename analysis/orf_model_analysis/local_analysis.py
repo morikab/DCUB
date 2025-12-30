@@ -160,6 +160,7 @@ def run_single_method_ecoli_and_bacillus(
         output_path=os.path.join("results", output_path),
         initiation_optimization_method=initiation_optimization_method,  # original, external
     )
+    print(default_user_inp_raw)
     return run_modules(default_user_inp_raw, should_run_output_module=False)
     # return run_orf_module(default_user_inp_raw)
     # run_input_processing(default_user_inp_raw)

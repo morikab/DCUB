@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Starting…</title>
+
+  <style>
+    :root {
+      --background: oklch(1 0 0);
+      --foreground: oklch(0.145 0 0);
+      --muted-foreground: oklch(0.708 0 0);
+      --chart-1: oklch(0.488 0.243 264.376);
+      --border: oklch(1 0 0 / 10%);
+      --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI",
+                   Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    html, body {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      color: var(--foreground);
+      font-family: var(--font-sans);
+
+      background: linear-gradient(
+        to bottom right,
+        #eff6ff,
+        #e0e7ff
+      );
+    }
+
+    .container {
+      height: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .spinner {
+      width: 48px;
+      height: 48px;
+      border: 4px solid var(--border);
+      border-top-color: var(--chart-1);
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin-bottom: 24px;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 8px;
+      font-weight: 500;
+    }
+
+    p {
+      font-size: 0.95rem;
+      color: var(--muted-foreground);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <div class="spinner"></div>
+    <h1>Starting application…</h1>
+    <p>Please wait while the services initialize</p>
+  </div>
+</body>
+</html>

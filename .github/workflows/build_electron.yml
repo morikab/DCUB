@@ -1,0 +1,95 @@
+name: Build DCUB Desktop App
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-macos:  # TODO - extend for linux and windows 
+    name: Build macOS Electron App
+    runs-on: macos-latest
+
+    steps:
+      # --------------------------------------------------
+      # 1. Checkout repository
+      # --------------------------------------------------
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # --------------------------------------------------
+      # 2. Set up Node.js
+      # --------------------------------------------------
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 23.11.0
+          cache: npm
+
+      # --------------------------------------------------
+      # 3. Set up Python (for FastAPI build)
+      # --------------------------------------------------
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      # --------------------------------------------------
+      # 4. Install Python dependencies
+      # --------------------------------------------------
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # --------------------------------------------------
+      # 5. Build standalone FastAPI server
+      # --------------------------------------------------
+      - name: Build FastAPI standalone executable
+        run: |
+          chmod +x build_fastapi.sh
+          ./build_fastapi.sh
+
+      # --------------------------------------------------
+      # 6. Verify FastAPI executable exists
+      # --------------------------------------------------
+      - name: Verify FastAPI build output
+        run: |
+          ls -la ui/DCUB/backend
+          test -f ui/DCUB/backend/fastapi_server
+
+      # --------------------------------------------------
+      # 7. Install UI dependencies
+      # --------------------------------------------------
+      - name: Install UI dependencies
+        working-directory: ui/DCUB
+        run: npm ci
+
+      # --------------------------------------------------
+      # 8. Build Next.js UI + prepare Electron assets
+      # --------------------------------------------------
+      - name: Build web UI for Electron
+        working-directory: ui/DCUB
+        run: npm run electron-dev
+
+      # --------------------------------------------------
+      # 9. Install Electron dependencies
+      # --------------------------------------------------
+      - name: Install Electron dependencies
+        working-directory: ui/DCUB/electron
+        run: npm ci
+
+      # --------------------------------------------------
+      # 10. Build Electron desktop application
+      # --------------------------------------------------
+      - name: Build Electron app
+        working-directory: ui/DCUB/electron
+        run: npm run build-electron
+
+      # --------------------------------------------------
+      # 11. Upload Electron build artifacts
+      # --------------------------------------------------
+      - name: Upload Electron artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: DCUB-macOS-build
+          path: |
+            ui/DCUB/electron/dist/**

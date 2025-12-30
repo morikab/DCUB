@@ -1,0 +1,52 @@
+{
+  "name": "DCUB-electron",
+  "version": "1.0.0",
+  "description": "DCUB Desktop Application",
+  "author": "Moran Kama",
+  "main": "main.js",
+  "scripts": {
+    "electron": "electron .",
+    "electron-dev": "NODE_ENV=development electron .",
+    "build-electron": "electron-builder",
+    "dist": "npm run build && electron-builder",
+    "pack": "electron-builder --dir"
+  },
+  "build": {
+    "appId": "com.dcub.app",
+    "productName": "DCUB",
+    "directories": {
+      "output": "dist"
+    },
+    "files": ["main.js", "preload.js", "loading.html", "../out/**/*", "assets/**/*"],
+    "extraResources": [
+      {
+        "from": "../backend/",
+        "to": ".",
+        "filter": [
+          "fastapi_server"
+        ]
+      },
+      {
+        "from": "../.next/standalone",
+        "to": ".next/standalone"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.developer-tools",
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "dependencies": {
+    "node-fetch": "^2.7.0"
+  },
+  "devDependencies": {
+    "electron": "^27.0.0",
+    "electron-builder": "^24.6.4"
+  }
+}
