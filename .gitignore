@@ -82,4 +82,4 @@ _MEI*
 *.temp
 tmp/
 temp/
-artifacts/
+ui/DCUB/backend/
