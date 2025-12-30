@@ -23,6 +23,9 @@ jobs:
         with:
           node-version: 23.11.0
           cache: npm
+          cache-dependency-path: |
+            ui/DCUB/package-lock.json
+            ui/DCUB/electron/package-lock.json
 
       # --------------------------------------------------
       # 3. Set up Python (for FastAPI build)
@@ -30,15 +33,20 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.11"
+          python-version: "3.9"
+          cache: "pip"
+          cache-dependency-path: |
+            app/requirements.txt
 
       # --------------------------------------------------
       # 4. Install Python dependencies
       # --------------------------------------------------
       - name: Install Python dependencies
+        working-directory: app
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
+          pip install pyinstaller
 
       # --------------------------------------------------
       # 5. Build standalone FastAPI server
@@ -54,7 +62,8 @@ jobs:
       - name: Verify FastAPI build output
         run: |
           ls -la ui/DCUB/backend
-          test -f ui/DCUB/backend/fastapi_server
+          ls -la ui/DCUB/backend/fastapi_server
+          test -x ui/DCUB/backend/fastapi_server/fastapi_server
 
       # --------------------------------------------------
       # 7. Install UI dependencies
@@ -64,18 +73,18 @@ jobs:
         run: npm ci
 
       # --------------------------------------------------
-      # 8. Build Next.js UI + prepare Electron assets
-      # --------------------------------------------------
-      - name: Build web UI for Electron
-        working-directory: ui/DCUB
-        run: npm run electron-dev
-
-      # --------------------------------------------------
-      # 9. Install Electron dependencies
+      # 8. Install Electron dependencies
       # --------------------------------------------------
       - name: Install Electron dependencies
         working-directory: ui/DCUB/electron
         run: npm ci
+
+      # --------------------------------------------------
+      # 9. Build Next.js UI + prepare Electron assets
+      # --------------------------------------------------
+      - name: Build web UI for Electron
+        working-directory: ui/DCUB
+        run: npm run electron-build
 
       # --------------------------------------------------
       # 10. Build Electron desktop application
@@ -92,4 +101,4 @@ jobs:
         with:
           name: DCUB-macOS-build
           path: |
-            ui/DCUB/electron/dist/**
+            ui/DCUB/electron/dist/*.dmg
