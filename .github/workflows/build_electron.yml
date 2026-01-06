@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       build_macos:
-        description: "Build macOS app"
+        description: "Build MacOS app"
         required: true
         default: "true"
       build_linux:
@@ -22,7 +22,7 @@ jobs:
   # ==================================================
   build-macos:
     if: ${{ github.event.inputs.build_macos == 'true' }}
-    name: Build macOS Electron App
+    name: Build MacOS Electron App
     runs-on: macos-latest
     continue-on-error: true
 
