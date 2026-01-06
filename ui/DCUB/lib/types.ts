@@ -4,6 +4,8 @@ export interface Organism {
   genomePath: string
   priority: number
   expressionDataPath?: string
+  expressionDataFormat?: "csv" | "json"
+  expressionDataType?: "protein_abundance" | "mrna_levels"
 }
 
 export interface ValidationResult {
