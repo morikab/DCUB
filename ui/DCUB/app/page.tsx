@@ -82,7 +82,7 @@ export default function DNAOptimizerPage() {
       const optimizationPayload = {
         user_input_dict: {
           sequence_file_path: sequenceFile ? sequenceFile.name : null,
-          sequence: sequenceFile ? null : dnaSequence,
+          sequence: dnaSequence,
           tuning_param: currentState.tuningParameter / 100, // Convert to 0-1 range
           organisms: organismsObject,
           clusters_count: 1,
