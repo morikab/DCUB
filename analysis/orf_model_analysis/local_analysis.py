@@ -14,6 +14,7 @@ from analysis.input_testing_data.generate_input_testing_data_for_modules import 
 from modules.main import run_modules
 from modules.main import run_input_processing
 from modules.main import run_orf_module
+from modules.models import UserInput
 
 
 current_directory = Path(__file__).parent.resolve()
@@ -161,7 +162,10 @@ def run_single_method_ecoli_and_bacillus(
         initiation_optimization_method=initiation_optimization_method,  # original, external
     )
     print(default_user_inp_raw)
-    return run_modules(default_user_inp_raw, should_run_output_module=False)
+    if "evaluation_score" in default_user_inp_raw:
+        default_user_inp_raw["evaluation_score_type"] = default_user_inp_raw.pop("evaluation_score")
+    user_input = UserInput(**default_user_inp_raw)
+    return run_modules(user_input, should_run_output_module=False)
     # return run_orf_module(default_user_inp_raw)
     # run_input_processing(default_user_inp_raw)
 
@@ -176,7 +180,7 @@ def run_single_method_arabidopsis(
         tuning_param: float = 0.5,
         initiation_optimization_method: str = "original",
 ):
-    user_input = generate_testing_data(
+    user_input_dict = generate_testing_data(
             orf_optimization_method = optimization_method,
             orf_optimization_cub_index = optimization_cub_index,
             wanted_hosts = wanted_hosts,
@@ -185,6 +189,9 @@ def run_single_method_arabidopsis(
             output_path = os.path.join("results", "arabidopsis"),
             initiation_optimization_method=initiation_optimization_method,
         )
+    if "evaluation_score" in user_input_dict:
+        user_input_dict["evaluation_score_type"] = user_input_dict.pop("evaluation_score")
+    user_input = UserInput(**user_input_dict)
     return run_modules(user_input, should_run_output_module=False)
 
 def compare_gene_mappings() -> None:

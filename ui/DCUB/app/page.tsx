@@ -59,7 +59,8 @@ export default function DNAOptimizerPage() {
         organismsObject[organismKey] = {
           genome_path: org.genomePath, // Use full path
           optimized: true,
-          expression_csv_type: "protein_abundance",
+          expression_csv_type: org.expressionDataType,
+          expression_csv_format: org.expressionDataFormat,
           expression_csv: org.expressionDataPath || null, // Use full path
           optimization_priority: org.priority,
         }
@@ -72,7 +73,8 @@ export default function DNAOptimizerPage() {
         organismsObject[organismKey] = {
           genome_path: org.genomePath, // Use full path
           optimized: false,
-          expression_csv_type: "protein_abundance",
+          expression_csv_type: org.expressionDataType,
+          expression_csv_format: org.expressionDataFormat,
           expression_csv: org.expressionDataPath || null, // Use full path
           optimization_priority: org.priority,
         }

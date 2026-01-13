@@ -2,6 +2,8 @@ import statistics
 import typing
 from dataclasses import dataclass
 from enum import Enum
+from pydantic import BaseModel, Field
+from typing import Optional, Dict, Literal
 
 
 @dataclass
@@ -240,4 +242,25 @@ class SequenceZscores:
             "normalized_wanted_hosts_scores" : self.normalized_wanted_hosts_scores,
             "normalized_unwanted_hosts_scores" : self.normalized_unwanted_hosts_scores,
         }
+
+# Pydantic models for API requests
+class OrganismRequest(BaseModel):
+    genome_path: str
+    optimized: bool
+    expression_csv_type: Optional[Literal["protein_abundance", "mrna_levels"]] = None
+    expression_csv_format: Optional[Literal["csv", "json"]] = None
+    expression_csv: Optional[str] = None
+    optimization_priority: float
+
+class UserInput(BaseModel):
+    sequence_file_path: Optional[str] = None
+    sequence: Optional[str] = None
+    tuning_param: float
+    organisms: Dict[str, OrganismRequest]
+    clusters_count: int
+    orf_optimization_method: ORFOptimizationMethod
+    orf_optimization_cub_index: ORFOptimizationCubIndex
+    initiation_optimization_method: InitiationOptimizationMethod
+    output_path: str
+    evaluation_score_type: EvaluationScore = Field(..., alias="evaluation_score")
 
