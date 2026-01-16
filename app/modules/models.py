@@ -162,6 +162,16 @@ class EvaluationScore(Enum):
     ratio = "ratio"
 
 
+class ExpressionFileType(Enum):
+    csv = "csv"
+    json = "json"
+
+
+class ExpressionDataType(Enum):
+    protein_abundance = "protein_abundance"
+    mrna_levels = "mrna_levels"
+
+
 @dataclass
 class ModuleInput:
     organisms: typing.List[Organism]
@@ -247,9 +257,9 @@ class SequenceZscores:
 class OrganismRequest(BaseModel):
     genome_path: str
     optimized: bool
-    expression_csv_type: Optional[Literal["protein_abundance", "mrna_levels"]] = None
-    expression_csv_format: Optional[Literal["csv", "json"]] = None
-    expression_csv: Optional[str] = None
+    expression_data_type: Optional[ExpressionDataType] = None
+    expression_file_format: Optional[ExpressionFileType] = None
+    expression_file_path: Optional[str] = None
     optimization_priority: float
 
 class UserInput(BaseModel):

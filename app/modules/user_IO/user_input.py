@@ -1,4 +1,3 @@
-import json
 from collections import defaultdict
 
 from modules.run_summary import RunSummary
@@ -13,9 +12,9 @@ logger = LoggerFactory.get_logger()
 
 
 class UserInputModule(object):
-    def __init__(self, user_input: models.UserInput, initiation_optimized_codons_num: int):
+    def __init__(self, user_input: models.UserInput, skipped_codons_num: int):
         self.user_input = user_input
-        self.initiation_optimized_codons_num = initiation_optimized_codons_num
+        self.skipped_codons_num = skipped_codons_num
 
     def run_module(
             self,
@@ -36,7 +35,7 @@ class UserInputModule(object):
 
         organisms_list = self._parse_organisms_list(
             organisms_input_list=self.user_input.organisms,
-            optimization_cub_index=self.user_input.orf_optimization_cub_index
+            optimization_cub_index=self.user_input.orf_optimization_cub_index,
         )
 
         module_input = models.ModuleInput(
@@ -73,7 +72,7 @@ class UserInputModule(object):
     def _parse_organisms_list(
             self,
             organisms_input_list: typing.Dict[str, models.OrganismRequest],
-            optimization_cub_index: models.ORFOptimizationCubIndex
+            optimization_cub_index: models.ORFOptimizationCubIndex,
     ) -> typing.List[models.Organism]:
         organisms_list = []
         organisms_names = set()
@@ -100,11 +99,9 @@ class UserInputModule(object):
                                          not organism.is_optimized])
         for organism in organisms_list:
             if organism.is_optimized:
-                if total_optimized_weights > 0:
-                    organism.optimization_priority /= total_optimized_weights
+                organism.optimization_priority /= total_optimized_weights
             else:
-                if total_deoptimized_weights > 0:
-                    organism.optimization_priority /= total_deoptimized_weights
+                organism.optimization_priority /= total_deoptimized_weights
             logger.info(f"{organism.name} : {organism.optimization_priority}")
 
         return organisms_list
@@ -112,7 +109,7 @@ class UserInputModule(object):
     def _parse_single_organism_input(
             self,
             organism_input: models.OrganismRequest,
-            optimization_cub_index: models.ORFOptimizationCubIndex
+            optimization_cub_index: models.ORFOptimizationCubIndex,
     ) -> models.Organism:
 
         is_optimized = organism_input.optimized
@@ -134,18 +131,17 @@ class UserInputModule(object):
             ) from e
         logger.info("------------------------------------------")
         logger.info(f"Parsing information for {organism_name}:")
+        logger.info(f"Raw organism request is: {organism_input}")
         logger.info("------------------------------------------")
         logger.info(f"Organism is defined as {'wanted' if is_optimized else 'unwanted'}")
         cds = extract_gene_data(genbank_path=gb_path)
 
-        print(organism_input)
-        exp_csv_type = organism_input.expression_csv_type
-        exp_csv_format = organism_input.expression_csv_format
-        exp_csv_fid = organism_input.expression_csv
-        estimated_expression = extract_gene_expression(cds=cds,
-                                                       expression_csv_fid=exp_csv_fid,
-                                                       expression_csv_type=exp_csv_type,
-                                                       expression_csv_format=exp_csv_format)
+        estimated_expression = extract_gene_expression(
+            cds=cds,
+            expression_file_path=organism_input.expression_file_path,
+            expression_data_type=organism_input.expression_data_type,
+            expression_file_format=organism_input.expression_file_format,
+        )
 
         cds_dict = {cds_record.name_and_function: cds_record.sequence for cds_record in cds}
         gene_names = list(cds_dict.keys())
@@ -158,7 +154,7 @@ class UserInputModule(object):
 
         if optimization_cub_index.is_codon_adaptation_index:
             reference_genes = get_reference_genes_for_cai(cds_dict, estimated_expression)
-            reference_genes_for_cub_calculation = [seq[self.initiation_optimized_codons_num*3:] for seq in reference_genes.values()]
+            reference_genes_for_cub_calculation = [seq[self.skipped_codons_num*3:] for seq in reference_genes.values()]
             cai = cb.scores.CodonAdaptationIndex(ref_seq=reference_genes_for_cub_calculation, ignore_stop=False)
             cai_weights = cai.weights.to_dict()
             cai_scores_dict = {gene_name: cai.get_score(cds_dict[gene_name]) for gene_name in gene_names}
@@ -167,7 +163,7 @@ class UserInputModule(object):
             tai = calculate_tai_weights(organism_name)
             if tai is not None:
                 tai_weights = tai.weights.to_dict()
-                tai_scores_dict = {gene_name: tai.get_score(cds_dict[gene_name][self.initiation_optimized_codons_num*3:]) for gene_name in gene_names if len(cds_dict[gene_name]) > (self.initiation_optimized_codons_num+1)*3}
+                tai_scores_dict = {gene_name: tai.get_score(cds_dict[gene_name][self.skipped_codons_num*3:]) for gene_name in gene_names if len(cds_dict[gene_name]) > (self.skipped_codons_num+1)*3}
 
         codon_frequencies = _calculate_codon_frequencies(cds_dict)
 

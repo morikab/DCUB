@@ -1,3 +1,5 @@
+import sys
+
 import itertools
 import json
 import os
@@ -8,13 +10,21 @@ from pathlib import Path
 
 from Bio import SeqIO
 
+# Add project root to path
+project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
+if project_root not in sys.path:
+    sys.path.insert(0, project_root)
+# Add app directory to path for relative imports in modules
+app_path = os.path.join(project_root, 'app')
+if app_path not in sys.path:
+    sys.path.insert(0, app_path)
+
 from analysis.input_testing_data.generate_input_testing_data_for_modules import \
     generate_testing_data_for_ecoli_and_bacillus
 from analysis.input_testing_data.generate_input_testing_data_for_modules import generate_testing_data
-from modules.main import run_modules
-from modules.main import run_input_processing
-from modules.main import run_orf_module
-from modules.models import UserInput
+from app.modules.main import run_modules
+from app.modules.main import run_input_processing
+from app.modules.main import run_orf_module
 
 
 current_directory = Path(__file__).parent.resolve()
@@ -150,7 +160,7 @@ def run_single_method_ecoli_and_bacillus(
         tuning_param: float = 0.5,
         initiation_optimization_method: str = "original",
 ):
-    default_user_inp_raw = generate_testing_data_for_ecoli_and_bacillus(
+    user_input = generate_testing_data_for_ecoli_and_bacillus(
         orf_optimization_method=optimization_method,
         orf_optimization_cub_index=optimization_cub_index,
         clusters_count=1,
@@ -161,13 +171,7 @@ def run_single_method_ecoli_and_bacillus(
         output_path=os.path.join("results", output_path),
         initiation_optimization_method=initiation_optimization_method,  # original, external
     )
-    print(default_user_inp_raw)
-    if "evaluation_score" in default_user_inp_raw:
-        default_user_inp_raw["evaluation_score_type"] = default_user_inp_raw.pop("evaluation_score")
-    user_input = UserInput(**default_user_inp_raw)
     return run_modules(user_input, should_run_output_module=False)
-    # return run_orf_module(default_user_inp_raw)
-    # run_input_processing(default_user_inp_raw)
 
 def run_single_method_arabidopsis(
         optimization_method: str,
@@ -180,7 +184,7 @@ def run_single_method_arabidopsis(
         tuning_param: float = 0.5,
         initiation_optimization_method: str = "original",
 ):
-    user_input_dict = generate_testing_data(
+    user_input = generate_testing_data(
             orf_optimization_method = optimization_method,
             orf_optimization_cub_index = optimization_cub_index,
             wanted_hosts = wanted_hosts,
@@ -189,9 +193,6 @@ def run_single_method_arabidopsis(
             output_path = os.path.join("results", "arabidopsis"),
             initiation_optimization_method=initiation_optimization_method,
         )
-    if "evaluation_score" in user_input_dict:
-        user_input_dict["evaluation_score_type"] = user_input_dict.pop("evaluation_score")
-    user_input = UserInput(**user_input_dict)
     return run_modules(user_input, should_run_output_module=False)
 
 def compare_gene_mappings() -> None:
@@ -233,7 +234,7 @@ def generate_sequences_fasta_file(root_dir) -> None:
                 sequences.append(seq)
                 sequences_names.append(directory_name[:-5])
 
-    from modules.shared_functions_and_vars import write_fasta
+    from app.modules.shared_functions_and_vars import write_fasta
 
     write_fasta(os.path.join(root_dir, "mcherry_variants"), sequences, sequences_names)
 
@@ -263,12 +264,15 @@ if __name__ == "__main__":
     # initiation_type = "external"
     optimization_methods =  [
         "single_codon_diff",
-        "single_codon_ratio",
-        "zscore_bulk_aa_diff",
-        "zscore_bulk_aa_ratio",
-        "single_wanted_organism",
+        # "single_codon_ratio",
+        # "zscore_bulk_aa_diff",
+        # "zscore_single_aa_ratio",
+        # "single_wanted_organism",
     ]
-    ecoli_optimizations = [True, False]
+    ecoli_optimizations = [
+        # True,
+         False,
+    ]
     for optimization_method,is_ecoli_optimized in itertools.product(optimization_methods, ecoli_optimizations):
         results = run_single_method_ecoli_and_bacillus(
             # optimization_method="zscore_single_aa_diff",

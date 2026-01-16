@@ -42,7 +42,7 @@ def run_modules(user_input: models.UserInput,
         initiation_optimized_codons_num = config["INITIATION"]["NUMBER_OF_CODONS_TO_OPTIMIZE"]
         user_input_module = user_IO.UserInputModule(
             user_input,
-            initiation_optimized_codons_num=initiation_optimized_codons_num
+            skipped_codons_num=initiation_optimized_codons_num
         )
         module_input = user_input_module.run_module(
             run_summary=run_summary,

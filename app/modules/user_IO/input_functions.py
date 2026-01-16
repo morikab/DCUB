@@ -35,62 +35,38 @@ def tai_from_tgcnDB(org_name):
     return tai_weights
 
 
-def extract_mrna_expression_levels(expression_fid: str, file_format: str) -> typing.Tuple[typing.List[str], typing.List[float]]:
-    if file_format == 'json':
-        expression_df = pd.read_json(expression_fid)
-        gene_col, level_col = 'gene', 'level'
-    elif file_format == 'csv':
-        expression_df = pd.read_csv(expression_fid)
+def extract_expression_levels(
+    expression_file_path: str,
+    expression_data_type: models.ExpressionDataType,
+    expression_file_format: models.ExpressionFileType,
+    ) -> typing.Tuple[typing.List[str], typing.List[float]]:
+    logger.info(f"Extracting expression levels from {expression_data_type.value} file in {expression_file_format.value} format.")
+    
+    if expression_file_format.value == models.ExpressionFileType.json.value:
+        expression_df = pd.read_json(expression_file_path)
+    elif expression_file_format.value == models.ExpressionFileType.csv.value:
+        expression_df = pd.read_csv(expression_file_path)
+    else:
+        raise ValueError(f"Unsupported format {expression_file_format}")
+
+    if expression_data_type.value == models.ExpressionDataType.mrna_levels.value:
         gene_col, level_col = 'gene', 'mRNA_level'
+    elif expression_data_type.value == models.ExpressionDataType.protein_abundance.value:
+        gene_col, level_col = 'gene', 'protein_abundance'
     else:
-        raise ValueError(f"Unsupported format {file_format}")
+        raise KeyError(F"Missing support for expression csv type: {expression_data_type}")
 
-    gene_name_to_mrna_level = {}
+    gene_name_to_level = {}
     for idx, pair in enumerate(zip(expression_df[gene_col].to_list(), expression_df[level_col].to_list())):
         measured_gene_name, expression_level = pair
         try:
-            gene_name_to_mrna_level[measured_gene_name.lower()] = float(expression_level)
+            gene_name_to_level[measured_gene_name.lower()] = float(expression_level)
         except:
             continue
-    mrna_levels = list(gene_name_to_mrna_level.values())
-    mrna_names = list(gene_name_to_mrna_level.keys())
+    levels = list(gene_name_to_level.values())
+    names = list(gene_name_to_level.keys())
 
-    return mrna_names, mrna_levels
-
-
-def extract_protein_abundance_levels(expression_fid: str, file_format: str) -> typing.Tuple[typing.List[str], typing.List[float]]:
-    if file_format == 'json':
-        expression_df = pd.read_json(expression_fid)
-        gene_col, level_col = 'gene', 'abundance'
-    elif file_format == 'csv':
-        expression_df = pd.read_csv(expression_fid)
-        gene_col, level_col = 'gene', 'abundance'
-    else:
-        raise ValueError(f"Unsupported format {file_format}")
-
-    gene_name_to_expression_level = {}
-    for idx, pair in enumerate(zip(expression_df[gene_col].to_list(), expression_df[level_col].to_list())):
-        measured_gene_name, expression_level = pair
-        try:
-            gene_name_to_expression_level[measured_gene_name.lower()] = float(expression_level)
-        except:
-            continue
-    protein_levels = list(gene_name_to_expression_level.values())
-    protein_names = list(gene_name_to_expression_level.keys())
-
-    return protein_names, protein_levels
-
-
-def extract_expression_levels(expression_csv_fid: str,
-                              expression_csv_type: str,
-                              expression_csv_format: str) -> typing.Tuple[typing.List[str], typing.List[float]]:
-    logger.info(f"Extracting expression levels from: {expression_csv_type} file in {expression_csv_format} format.")
-    if expression_csv_type == "mrna_levels":
-        return extract_mrna_expression_levels(expression_csv_fid, expression_csv_format)
-    elif expression_csv_type == "protein_abundance":
-        return extract_protein_abundance_levels(expression_csv_fid, expression_csv_format)
-    else:
-        raise KeyError(F"Missing support for expression csv type: {expression_csv_type}")
+    return names, levels
 
 
 def is_known_position_type(position: typing.Type[SeqFeature.Position]) -> bool:
@@ -165,21 +141,22 @@ def extract_gene_data(genbank_path: str):
     return all_cds
 
 
+
 def extract_gene_expression(
         cds: typing.Sequence[models.Cds],
-        expression_csv_fid: typing.Optional[str] = None,
-        expression_csv_type: typing.Optional[str] = None,
-        expression_csv_format: typing.Optional[str] = 'csv',
+        expression_file_path: typing.Optional[str] = None,
+        expression_data_type: typing.Optional[models.ExpressionDataType] = None,
+        expression_file_format: typing.Optional[models.ExpressionFileType] = None,
 ) -> typing.Optional[typing.Dict[str, float]]:
-    should_use_expression_csv = expression_csv_fid is not None
-    if not should_use_expression_csv:
+    should_not_use_expression_file = expression_file_path is None
+    if should_not_use_expression_file:
         return None
 
     try:
         gene_expression_names, gene_expression_levels = extract_expression_levels(
-            expression_csv_fid=expression_csv_fid,
-            expression_csv_type=expression_csv_type,
-            expression_csv_format=expression_csv_format
+            expression_file_path=expression_file_path,
+            expression_data_type=expression_data_type,
+            expression_file_format=expression_file_format
         )
     except Exception as e:
         logger.error(f"Expression data file is corrupt. Error: {e}")
