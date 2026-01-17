@@ -42,7 +42,7 @@ export default function DNAOptimizerPage() {
 
       if (!validation.isValid) {
         setSubmitStatus("error")
-        setSubmitMessage(validation.errors.join(", "))
+        setSubmitMessage(validation.errors?.join(", ") || "Validation failed")
         return
       }
 
@@ -59,9 +59,9 @@ export default function DNAOptimizerPage() {
         organismsObject[organismKey] = {
           genome_path: org.genomePath, // Use full path
           optimized: true,
-          expression_csv_type: org.expressionDataType,
-          expression_csv_format: org.expressionDataFormat,
-          expression_csv: org.expressionDataPath || null, // Use full path
+          expression_data_type: org.expressionDataType,
+          expression_file_format: org.expressionDataFormat,
+          expression_file_path: org.expressionDataPath || null, // Use full path
           optimization_priority: org.priority,
         }
       })
@@ -73,9 +73,9 @@ export default function DNAOptimizerPage() {
         organismsObject[organismKey] = {
           genome_path: org.genomePath, // Use full path
           optimized: false,
-          expression_csv_type: org.expressionDataType,
-          expression_csv_format: org.expressionDataFormat,
-          expression_csv: org.expressionDataPath || null, // Use full path
+          expression_data_type: org.expressionDataType,
+          expression_file_format: org.expressionDataFormat,
+          expression_file_path: org.expressionDataPath || null, // Use full path
           optimization_priority: org.priority,
         }
       })
@@ -129,6 +129,9 @@ export default function DNAOptimizerPage() {
       setShowResults(true)
       setSubmitStatus("success")
       setSubmitMessage("DNA optimization completed successfully!")
+      
+      // Clear all form fields after successful optimization
+      reset()
     } catch (error) {
       console.error("Optimization error:", error)
       setSubmitStatus("error")
@@ -193,6 +196,8 @@ export default function DNAOptimizerPage() {
     setOptimizationResult(null)
     setSubmitStatus("idle")
     setSubmitMessage("")
+    // Clear all form fields when going back to form
+    reset()
   }
 
   // Show loading screen while processing

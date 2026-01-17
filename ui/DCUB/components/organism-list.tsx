@@ -236,7 +236,7 @@ export function OrganismList({ type }: OrganismListProps) {
                 <div className="flex-1 min-h-[120px]">
                   <FileInput
                     id="genome-path"
-                    placeholder="/path/to/genome.gb"
+                    placeholder="/path/to/genome.db"
                     value={newOrganism.genomePath || ""}
                     onChange={(value) => setNewOrganism((prev) => ({ ...prev, genomePath: value }))}
                     accept=".gb,.gbf,.gbff,.gbk"
@@ -336,7 +336,7 @@ export function OrganismList({ type }: OrganismListProps) {
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={downloadExpressionSample}
+                      onClick={() => downloadExpressionSample(newOrganism.expressionDataFormat, newOrganism.expressionDataType)}
                       className="text-blue-600 hover:text-blue-800"
                     >
                       <Download className="w-4 h-4 mr-1" />
@@ -413,7 +413,7 @@ function OrganismCard({ organism, onUpdate, onRemove }: OrganismCardProps) {
             <div className="space-y-2">
               <Label>GenBank Genome File (.gb/.gbf/.gbff)</Label>
               <FileInput
-                placeholder="/path/to/genome.gb"
+                placeholder="/path/to/genome.db"
                 value={organism.genomePath}
                 onChange={(value) => onUpdate({ ...organism, genomePath: value })}
                 accept=".gb,.gbf,.gbk,.gbff"
@@ -504,7 +504,7 @@ function OrganismCard({ organism, onUpdate, onRemove }: OrganismCardProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => downloadExpressionSample(newOrganism.expressionDataFormat, newOrganism.expressionDataType)}
+                    onClick={() => downloadExpressionSample(organism.expressionDataFormat || 'csv', organism.expressionDataType || 'protein_abundance')}
                     className="text-blue-600 hover:text-blue-800"
                   >
                     <Download className="w-4 h-4 mr-1" />

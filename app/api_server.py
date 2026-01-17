@@ -9,7 +9,7 @@ import uvicorn
 # Ensure modules can be imported
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from modules.main import run_modules
-from app.modules.models import UserInput
+from modules.models import UserInput
 
 app = FastAPI()
 
