@@ -22,10 +22,11 @@ class EvaluationModuleResult:
         }
 
     def get_score(self, score_type: models.EvaluationScore) -> float:
-        if score_type == models.EvaluationScore.average_distance:
+        score_value = score_type.value
+        if score_value == models.EvaluationScore.average_distance.value:
             return self.average_distance_score
-        if score_type == models.EvaluationScore.weakest_link:
+        if score_value == models.EvaluationScore.weakest_link.value:
             return self.weakest_link_score
-        if score_type == models.EvaluationScore.ratio:
+        if score_value == models.EvaluationScore.ratio.value:
             return self.ratio_score
-        raise ValueError(F"score type {score_type} is not supported")
+        raise ValueError(F"score type {score_type} (value: {score_value}) is not supported")

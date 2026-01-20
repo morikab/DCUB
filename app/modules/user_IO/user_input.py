@@ -1,4 +1,3 @@
-import json
 from collections import defaultdict
 
 from modules.run_summary import RunSummary
@@ -13,73 +12,54 @@ logger = LoggerFactory.get_logger()
 
 
 class UserInputModule(object):
-    @staticmethod
-    def get_name() -> str:
-        return "User Input"
+    def __init__(self, user_input: models.UserInput, skipped_codons_num: int):
+        self.user_input = user_input
+        self.skipped_codons_num = skipped_codons_num
 
-    @classmethod
     def run_module(
-            cls,
-            user_inp_raw: typing.Dict,
-            initiation_optimized_codons_num: int,
+            self,
             run_summary: RunSummary,
     ) -> models.ModuleInput:
         logger.info('\n##########################')
         logger.info('# User Input #')
         logger.info('##########################')
-        return cls._parse_input(
-            module_input=user_inp_raw,
-            skipped_codons_num=initiation_optimized_codons_num,
+        return self._parse_input(
             run_summary=run_summary,
         )
 
-    @classmethod
     def _parse_input(
-            cls,
-            module_input: typing.Dict[str, typing.Any],
-            skipped_codons_num: int,
+            self,
             run_summary: RunSummary,
     ) -> models.ModuleInput:
-        orf_optimization_cub_index = models.ORFOptimizationCubIndex(module_input["orf_optimization_cub_index"]) if \
-            module_input.get("orf_optimization_cub_index") else None
-        orf_optimization_method = models.ORFOptimizationMethod(module_input["orf_optimization_method"]) if \
-            module_input.get("orf_optimization_method") else None
-        initiation_optimization_method = models.InitiationOptimizationMethod(
-            module_input["initiation_optimization_method"]
-        ) if module_input.get("initiation_optimization_method") else None
-        evaluation_score = models.EvaluationScore(module_input["evaluation_score"]) if \
-            module_input.get("evaluation_score") else None
-        tuning_parameter = module_input["tuning_param"]
-        clusters_count = module_input["clusters_count"]
-        output_path = module_input.get("output_path")
+        orf_sequence = self._parse_orf_sequence()
 
-        orf_sequence = cls._parse_orf_sequence(module_input)
+        organisms_list = self._parse_organisms_list(
+            organisms_input_list=self.user_input.organisms,
+            optimization_cub_index=self.user_input.orf_optimization_cub_index,
+        )
 
-        organisms_list = cls._parse_organisms_list(organisms_input_list=module_input["organisms"],
-                                                   optimization_cub_index=orf_optimization_cub_index,
-                                                   skipped_codons_num=skipped_codons_num)
-
-        module_input = models.ModuleInput(organisms=organisms_list,
-                                          sequence=orf_sequence,
-                                          tuning_parameter=tuning_parameter,
-                                          orf_optimization_method=orf_optimization_method,
-                                          orf_optimization_cub_index=orf_optimization_cub_index,
-                                          initiation_optimization_method=initiation_optimization_method,
-                                          evaluation_score=evaluation_score,
-                                          clusters_count=clusters_count,
-                                          output_path=output_path)
+        module_input = models.ModuleInput(
+            organisms=organisms_list,
+            sequence=orf_sequence,
+            tuning_parameter=self.user_input.tuning_param,
+            orf_optimization_method=self.user_input.orf_optimization_method,
+            orf_optimization_cub_index=self.user_input.orf_optimization_cub_index,
+            initiation_optimization_method=self.user_input.initiation_optimization_method,
+            evaluation_score=self.user_input.evaluation_score_type,
+            clusters_count=self.user_input.clusters_count,
+            output_path=self.user_input.output_path
+        )
 
         run_summary.add_to_run_summary("module_input", module_input.summary)
 
         return module_input
 
-    @classmethod
-    def _parse_orf_sequence(cls, user_input: typing.Dict[str, typing.Any]) -> str:
-        sequence = user_input.get("sequence")
+    def _parse_orf_sequence(self) -> str:
+        sequence = self.user_input.sequence
         if sequence is not None:
             return sequence
 
-        orf_fasta_file_path = user_input["sequence_file_path"]
+        orf_fasta_file_path = self.user_input.sequence_file_path
         logger.info(F"Sequence to be optimized given in the following file: {orf_fasta_file_path}")
 
         try:
@@ -89,19 +69,18 @@ class UserInputModule(object):
                 F"Error in orf sequence .fasta file: {orf_fasta_file_path}. Make sure you inserted a valid .fasta file "
                 F"containing a single record")
 
-    @classmethod
-    def _parse_organisms_list(cls,
-                              organisms_input_list: typing.Dict[str, typing.Any],
-                              optimization_cub_index: models.ORFOptimizationCubIndex,
-                              skipped_codons_num: int) -> typing.List[models.Organism]:
+    def _parse_organisms_list(
+            self,
+            organisms_input_list: typing.Dict[str, models.OrganismRequest],
+            optimization_cub_index: models.ORFOptimizationCubIndex,
+    ) -> typing.List[models.Organism]:
         organisms_list = []
         organisms_names = set()
         for organism_key, organism_input in organisms_input_list.items():
             try:
-                organism = cls._parse_single_organism_input(
+                organism = self._parse_single_organism_input(
                     organism_input=organism_input,
                     optimization_cub_index=optimization_cub_index,
-                    skipped_codons_num=skipped_codons_num,
                 )
             except Exception as e:
                 raise ValueError(f"Error in organism input: {organism_key}, re-check your input")
@@ -127,30 +106,18 @@ class UserInputModule(object):
 
         return organisms_list
 
-    @staticmethod
-    def _parse_single_organism_input(organism_input: typing.Dict[str, typing.Any],
-                                     optimization_cub_index: models.ORFOptimizationCubIndex,
-                                     skipped_codons_num: int) -> models.Organism:
+    def _parse_single_organism_input(
+            self,
+            organism_input: models.OrganismRequest,
+            optimization_cub_index: models.ORFOptimizationCubIndex,
+    ) -> models.Organism:
 
-        is_optimized = organism_input["optimized"]
-        gb_path = organism_input["genome_path"]
+        is_optimized = organism_input.optimized
+        gb_path = organism_input.genome_path
 
         # FIXME - delete
         parsed_organism_file_name = f"{gb_path.strip('.gb')}_{is_optimized}_parsed"
         parsed_organism_file = parsed_organism_file_name + ".json"
-
-        # FIXME - delete
-        # if os.path.exists(parsed_organism_file):
-        #     with open(parsed_organism_file) as org_file:
-        #         organism_data = json.load(org_file)
-        #         return models.Organism(name=organism_data["name"],
-        #                                cai_profile=organism_data["cai_weights"],
-        #                                tai_profile=organism_data["tai_weights"],
-        #                                cai_scores=organism_data["cai_scores"],
-        #                                tai_scores=organism_data["tai_scores"],
-        #                                reference_genes=organism_data["reference_genes"],
-        #                                is_optimized=organism_data["is_wanted"],
-        #                                optimization_priority=organism_data["optimization_priority"])
 
         # FIXME - end
         try:
@@ -164,16 +131,17 @@ class UserInputModule(object):
             ) from e
         logger.info("------------------------------------------")
         logger.info(f"Parsing information for {organism_name}:")
+        logger.info(f"Raw organism request is: {organism_input}")
         logger.info("------------------------------------------")
         logger.info(f"Organism is defined as {'wanted' if is_optimized else 'unwanted'}")
         cds = extract_gene_data(genbank_path=gb_path)
 
-        print(organism_input)
-        exp_csv_type = organism_input.get("expression_csv_type")
-        exp_csv_fid = organism_input.get("expression_csv")
-        estimated_expression = extract_gene_expression(cds=cds,
-                                                       expression_csv_fid=exp_csv_fid,
-                                                       expression_csv_type=exp_csv_type)
+        estimated_expression = extract_gene_expression(
+            cds=cds,
+            expression_file_path=organism_input.expression_file_path,
+            expression_data_type=organism_input.expression_data_type,
+            expression_file_format=organism_input.expression_file_format,
+        )
 
         cds_dict = {cds_record.name_and_function: cds_record.sequence for cds_record in cds}
         gene_names = list(cds_dict.keys())
@@ -186,7 +154,7 @@ class UserInputModule(object):
 
         if optimization_cub_index.is_codon_adaptation_index:
             reference_genes = get_reference_genes_for_cai(cds_dict, estimated_expression)
-            reference_genes_for_cub_calculation = [seq[skipped_codons_num*3:] for seq in reference_genes.values()]
+            reference_genes_for_cub_calculation = [seq[self.skipped_codons_num*3:] for seq in reference_genes.values()]
             cai = cb.scores.CodonAdaptationIndex(ref_seq=reference_genes_for_cub_calculation, ignore_stop=False)
             cai_weights = cai.weights.to_dict()
             cai_scores_dict = {gene_name: cai.get_score(cds_dict[gene_name]) for gene_name in gene_names}
@@ -195,11 +163,11 @@ class UserInputModule(object):
             tai = calculate_tai_weights(organism_name)
             if tai is not None:
                 tai_weights = tai.weights.to_dict()
-                tai_scores_dict = {gene_name: tai.get_score(cds_dict[gene_name][skipped_codons_num*3:]) for gene_name in gene_names if len(cds_dict[gene_name]) > (skipped_codons_num+1)*3}
+                tai_scores_dict = {gene_name: tai.get_score(cds_dict[gene_name][self.skipped_codons_num*3:]) for gene_name in gene_names if len(cds_dict[gene_name]) > (self.skipped_codons_num+1)*3}
 
         codon_frequencies = _calculate_codon_frequencies(cds_dict)
 
-        optimization_priority = organism_input.get("optimization_priority") or DEFAULT_ORGANISM_PRIORITY
+        optimization_priority = organism_input.optimization_priority or DEFAULT_ORGANISM_PRIORITY
         organism_object = models.Organism(name=organism_name,
                                           cai_profile=cai_weights,
                                           tai_profile=tai_weights,

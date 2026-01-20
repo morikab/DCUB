@@ -5,10 +5,12 @@ from scipy.stats.mstats import gmean
 
 from logger_factory.logger_factory import LoggerFactory
 from modules import models
+from modules.models import ORFOptimizationMethod 
 from modules import shared_functions_and_vars
 from modules.configuration import Configuration
 from modules.run_summary import RunSummary
 from modules.timer import Timer
+
 
 logger = LoggerFactory.get_logger()
 config = Configuration.get_config()
@@ -18,7 +20,7 @@ config = Configuration.get_config()
 def optimize_sequence(
         target_gene: str,
         organisms: typing.Sequence[models.Organism],
-        optimization_method: models.ORFOptimizationMethod,
+        optimization_method: ORFOptimizationMethod,
         optimization_cub_index: models.ORFOptimizationCubIndex,
         tuning_param: float,
         skipped_codons_num: int,
@@ -121,7 +123,7 @@ def _get_max_organism_attribute_value(
 def _calculate_organism_loss_per_codon(organism: models.Organism,
                                        codon: str,
                                        max_value: float,
-                                       optimization_method: models.ORFOptimizationMethod,
+                                       optimization_method: ORFOptimizationMethod,
                                        organism_attribute_name: str) -> float:
     organism_codon_weight = getattr(organism, organism_attribute_name).get(codon, 0)
 
@@ -144,30 +146,35 @@ def _calculate_organism_loss_per_codon(organism: models.Organism,
         return organism_codon_weight ** 2
 
     optimization_method_to_loss_function_for_optimized_organisms = {
-        models.ORFOptimizationMethod.single_codon_diff: _optimized_organism_diff_based_loss_function,
-        models.ORFOptimizationMethod.single_codon_ratio: _optimized_organism_ratio_based_loss_function,
-        models.ORFOptimizationMethod.single_codon_weakest_link: _optimized_organism_weakest_link_based_loss_function,
+        models.ORFOptimizationMethod.single_codon_diff.value: _optimized_organism_diff_based_loss_function,
+        models.ORFOptimizationMethod.single_codon_ratio.value: _optimized_organism_ratio_based_loss_function,
+        models.ORFOptimizationMethod.single_codon_weakest_link.value: _optimized_organism_weakest_link_based_loss_function,
     }
     optimization_method_to_loss_function_for_deoptimized_organisms = {
-        models.ORFOptimizationMethod.single_codon_diff: _deoptimized_organism_diff_based_loss_function,
-        models.ORFOptimizationMethod.single_codon_ratio: _deoptimized_organism_ratio_based_loss_function,
-        models.ORFOptimizationMethod.single_codon_weakest_link: _deoptimized_organism_weakest_link_based_loss_function,
+        models.ORFOptimizationMethod.single_codon_diff.value: _deoptimized_organism_diff_based_loss_function,
+        models.ORFOptimizationMethod.single_codon_ratio.value: _deoptimized_organism_ratio_based_loss_function,
+        models.ORFOptimizationMethod.single_codon_weakest_link.value: _deoptimized_organism_weakest_link_based_loss_function,
     }
 
-    loss_function_mapping = optimization_method_to_loss_function_for_optimized_organisms if organism.is_optimized else \
-        optimization_method_to_loss_function_for_deoptimized_organisms
+    if organism.is_optimized:
+        loss_function_mapping = optimization_method_to_loss_function_for_optimized_organisms
+    else:
+        loss_function_mapping = optimization_method_to_loss_function_for_deoptimized_organisms
 
-    if optimization_method not in loss_function_mapping:
-        raise ValueError(F"Missing loss function mapping for optimization method: {optimization_method}")
+    method_value = optimization_method.value
+    if method_value in loss_function_mapping:
+        return loss_function_mapping[method_value]()
 
-    return loss_function_mapping[optimization_method]()
+    raise ValueError(
+        F"Missing loss function mapping for optimization method: {optimization_method} (value: {method_value})."
+    )
 
 
 # --------------------------------------------------------------
 def loss_function(organisms: typing.Sequence[models.Organism],
                   codons: typing.Sequence[str],
                   tuning_param: float,
-                  optimization_method: models.ORFOptimizationMethod,
+                  optimization_method: ORFOptimizationMethod,
                   optimization_cub_index: models.ORFOptimizationCubIndex) -> typing.Sequence[typing.Dict[str, float]]:
     """
     The function iterates through each organism and sums up loss for each codon.
@@ -216,7 +223,7 @@ def loss_function(organisms: typing.Sequence[models.Organism],
 
 
 # --------------------------------------------------------------
-def _calculate_total_loss_per_codon(optimization_method: models.ORFOptimizationMethod,
+def _calculate_total_loss_per_codon(optimization_method: ORFOptimizationMethod,
                                     optimized_organisms_loss: typing.List[float],
                                     deoptimized_organisms_loss: typing.List[float],
                                     optimized_organisms_weights: typing.List[float],
@@ -245,21 +252,26 @@ def _calculate_total_loss_per_codon(optimization_method: models.ORFOptimizationM
                 (1 - tuning_parameter) * max(weighted_deoptimized_organisms_scores))
 
     optimization_method_to_total_loss = {
-        models.ORFOptimizationMethod.single_codon_diff: _diff_total_loss,
-        models.ORFOptimizationMethod.single_codon_ratio: _ratio_total_loss,
-        models.ORFOptimizationMethod.single_codon_weakest_link: _weakest_link_total_loss,
+        models.ORFOptimizationMethod.single_codon_diff.value: _diff_total_loss,
+        models.ORFOptimizationMethod.single_codon_ratio.value: _ratio_total_loss,
+        models.ORFOptimizationMethod.single_codon_weakest_link.value: _weakest_link_total_loss,
     }
 
-    if optimization_method not in optimization_method_to_total_loss:
-        raise NotImplementedError(F"Optimization method: {optimization_method}")
-
-    return optimization_method_to_total_loss[optimization_method]()
+    
+    # Fallback: find by enum value in case of enum comparison issues
+    method_value = optimization_method.value
+    if method_value in optimization_method_to_total_loss:
+        return optimization_method_to_total_loss[method_value]()
+    
+    raise NotImplementedError(
+        F"Optimization method: {optimization_method} (value: {method_value})."
+    )
 
 
 # --------------------------------------------------------------
 def _calculate_codons_loss(organisms: typing.Sequence[models.Organism],
                            tuning_param: float,
-                           optimization_method: models.ORFOptimizationMethod,
+                           optimization_method: ORFOptimizationMethod,
                            optimization_cub_index: models.ORFOptimizationCubIndex,
                            run_summary: RunSummary) -> typing.Dict[str, typing.Dict[str, float]]:
     """

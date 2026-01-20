@@ -28,21 +28,23 @@ logger = LoggerFactory.get_logger()
 config = Configuration.read_config()
 
 
-def run_input_processing(user_input_dict: typing.Optional[typing.Dict[str, typing.Any]] = None) -> models.ModuleInput:
+def run_input_processing(user_input: models.UserInput) -> models.ModuleInput:
     run_summary = RunSummary()
-    return user_IO.UserInputModule.run_module(user_inp_raw=user_input_dict, run_summary=run_summary)
+    return user_IO.UserInputModule.run_module(user_input=user_input, run_summary=run_summary)
 
 
-def run_modules(user_input_dict: typing.Dict[str, typing.Any],
+def run_modules(user_input: models.UserInput,
                 should_run_output_module: bool = True) -> typing.Dict[str, typing.Any]:
     run_summary = RunSummary()
     final_output = {}
     try:
         before_parsing_input = time.time()
         initiation_optimized_codons_num = config["INITIATION"]["NUMBER_OF_CODONS_TO_OPTIMIZE"]
-        module_input = user_IO.UserInputModule.run_module(
-            user_inp_raw=user_input_dict,
-            initiation_optimized_codons_num=initiation_optimized_codons_num,
+        user_input_module = user_IO.UserInputModule(
+            user_input,
+            skipped_codons_num=initiation_optimized_codons_num
+        )
+        module_input = user_input_module.run_module(
             run_summary=run_summary,
         )
         after_parsing_input = time.time()

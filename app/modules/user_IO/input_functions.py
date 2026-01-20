@@ -35,49 +35,38 @@ def tai_from_tgcnDB(org_name):
     return tai_weights
 
 
-def extract_mrna_expression_levels(expression_csv_fid: str) -> typing.Tuple[typing.List[str], typing.List[float]]:
-    expression_df = pd.read_csv(expression_csv_fid)
+def extract_expression_levels(
+    expression_file_path: str,
+    expression_data_type: models.ExpressionDataType,
+    expression_file_format: models.ExpressionFileType,
+    ) -> typing.Tuple[typing.List[str], typing.List[float]]:
+    logger.info(f"Extracting expression levels from {expression_data_type.value} file in {expression_file_format.value} format.")
+    
+    if expression_file_format.value == models.ExpressionFileType.json.value:
+        expression_df = pd.read_json(expression_file_path)
+    elif expression_file_format.value == models.ExpressionFileType.csv.value:
+        expression_df = pd.read_csv(expression_file_path)
+    else:
+        raise ValueError(f"Unsupported format {expression_file_format}")
 
-    gene_name_to_mrna_level = {}
-    for idx, pair in enumerate(zip(expression_df.gene.to_list(), expression_df.mRNA_level.to_list())):
+    if expression_data_type.value == models.ExpressionDataType.mrna_levels.value:
+        gene_col, level_col = 'gene', 'mRNA_level'
+    elif expression_data_type.value == models.ExpressionDataType.protein_abundance.value:
+        gene_col, level_col = 'gene', 'protein_abundance'
+    else:
+        raise KeyError(F"Missing support for expression csv type: {expression_data_type}")
+
+    gene_name_to_level = {}
+    for idx, pair in enumerate(zip(expression_df[gene_col].to_list(), expression_df[level_col].to_list())):
         measured_gene_name, expression_level = pair
         try:
-            gene_name_to_mrna_level[measured_gene_name.lower()] = float(expression_level)
+            gene_name_to_level[measured_gene_name.lower()] = float(expression_level)
         except:
             continue
-    mrna_levels = list(gene_name_to_mrna_level.values())
-    mrna_names = list(gene_name_to_mrna_level.keys())
+    levels = list(gene_name_to_level.values())
+    names = list(gene_name_to_level.keys())
 
-    return mrna_names, mrna_levels
-
-
-def extract_protein_abundance_levels(expression_csv_fid: str) -> typing.Tuple[typing.List[str], typing.List[float]]:
-    expression_df = pd.read_json(expression_csv_fid)
-
-    gene_name_to_expression_level = {}
-    for idx, pair in enumerate(zip(expression_df.name.to_list(), expression_df.abundance.to_list())):
-        measured_gene_name, expression_level = pair
-        try:
-            gene_name_to_expression_level[measured_gene_name.lower()] = float(expression_level)
-        except:
-            continue
-    protein_levels = list(gene_name_to_expression_level.values())
-    protein_names = list(gene_name_to_expression_level.keys())
-
-    return protein_names, protein_levels
-
-
-def extract_expression_levels(expression_csv_fid: str,
-                              expression_csv_type: str) -> typing.Tuple[typing.List[str], typing.List[float]]:
-    expression_csv_type_mapping = {
-        "mrna_levels": extract_mrna_expression_levels,
-        "protein_abundance": extract_protein_abundance_levels,
-    }
-    logger.info(f"Extracting expression levels from: {expression_csv_type} file.")
-    if expression_csv_type not in expression_csv_type_mapping:
-        raise KeyError(F"Missing support for expression csv type: {expression_csv_type}")
-
-    return expression_csv_type_mapping[expression_csv_type](expression_csv_fid)
+    return names, levels
 
 
 def is_known_position_type(position: typing.Type[SeqFeature.Position]) -> bool:
@@ -152,26 +141,30 @@ def extract_gene_data(genbank_path: str):
     return all_cds
 
 
+
 def extract_gene_expression(
         cds: typing.Sequence[models.Cds],
-        expression_csv_fid: typing.Optional[str] = None,
-        expression_csv_type: typing.Optional[str] = None,
+        expression_file_path: typing.Optional[str] = None,
+        expression_data_type: typing.Optional[models.ExpressionDataType] = None,
+        expression_file_format: typing.Optional[models.ExpressionFileType] = None,
 ) -> typing.Optional[typing.Dict[str, float]]:
-    should_use_expression_csv = expression_csv_fid is not None
-    if not should_use_expression_csv:
+    should_not_use_expression_file = expression_file_path is None
+    if should_not_use_expression_file:
         return None
 
     try:
         gene_expression_names, gene_expression_levels = extract_expression_levels(
-            expression_csv_fid=expression_csv_fid,
-            expression_csv_type=expression_csv_type,
+            expression_file_path=expression_file_path,
+            expression_data_type=expression_data_type,
+            expression_file_format=expression_file_format
         )
-    except:
-        logger.info("Expression data file is corrupt. \nMake sure that: ")
-        logger.info("1. File is in csv format")
+    except Exception as e:
+        logger.error(f"Expression data file is corrupt. Error: {e}")
+        logger.info("Make sure that:")
+        logger.info("1. File is in the selected format (csv/json)")
         logger.info("2. Gene names fit their NCBI naming ")
-        logger.info("3. Column with the gene names is labeled 'gene' for mrna levels or 'name' for protein abundance ")
-        logger.info("4. Column with the gene expression levels is labeled 'mRNA_level' or 'abundance', accordingly")
+        logger.info("3. For JSON: column with the gene names is labeled 'gene', and expression level is 'level' for mrna_levels or 'abundance' for protein abundance.")
+        logger.info("4. For CSV: column with the gene names is labeled 'gene', and expression level is 'mRNA_level' for mrna_levels or 'abundance' for protein abundance.")
         return None
 
     estimated_expression = {}
@@ -229,20 +222,17 @@ def get_reference_genes_for_cai(
 
 
 def calculate_tai_weights(organism_name: str) -> typing.Optional[cb.scores.TrnaAdaptationIndex]:
-    # TODO - move to json file + pre load for multiple organisms or use the API to derive
-    #  taxonomy level from the .gb file
-    organism_name_to_url_mapping = {
-        "Escherichia coli": "http://gtrnadb.ucsc.edu/genomes/bacteria/Esch_coli_K_12_MG1655/",
-        "Bacillus subtilis": "http://gtrnadb.ucsc.edu/genomes/bacteria/Baci_subt_subtilis_168/"
+    # TODO - add option to choose domain (bacteria) and genome_id for tAI inference
+    organism_name_to_gtrna_genome = {
+        "Escherichia coli": "Esch_coli_K_12_MG1655",
+        "Bacillus subtilis": "Baci_subt_subtilis_168"
     }
-    if organism_name not in organism_name_to_url_mapping:
+    if organism_name not in organism_name_to_gtrna_genome:
         logger.info(f"tGCN values were not found for {organism_name}, tAI profile was not calculated.")
         return None
     # TODO - consider using https://github.com/AliYoussef96/gtAI for better results
-    logger.info(f"tGCN values were found for {organism_name}. Calculating tAI profile.")
+    logger.info(f"tGCN values were found for {organism_name} under {organism_name_to_gtrna_genome[organism_name]} . Calculating tAI profile.")
+    url_prefix = "https://gtrnadb.org/genomes/bacteria"
+    url = f"{url_prefix}/{organism_name_to_gtrna_genome[organism_name]}/"
 
-    # Patch for fixing a certificate expiration issue when accessing gtrnadb
-    import ssl
-    ssl._create_default_https_context = ssl._create_unverified_context
-
-    return cb.scores.TrnaAdaptationIndex(url=organism_name_to_url_mapping[organism_name], prokaryote=True)
+    return cb.scores.TrnaAdaptationIndex(url=url, prokaryote=True)
