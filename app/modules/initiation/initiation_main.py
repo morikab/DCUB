@@ -1,5 +1,3 @@
-import typing
-
 from logger_factory.logger_factory import LoggerFactory
 from modules import models
 from modules.configuration import Configuration
