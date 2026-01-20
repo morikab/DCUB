@@ -278,12 +278,12 @@ if __name__ == "__main__":
             # optimization_method="zscore_single_aa_diff",
             # optimization_method="zscore_single_aa_ratio",
             optimization_method=optimization_method,
-            optimization_cub_index="CAI",
+            optimization_cub_index="tAI",
             is_ecoli_optimized=is_ecoli_optimized,
             output_path=f"mcherry-debug-metric-0.3",
             orf_sequence_file=DEFAULT_SEQUENCE_FILE_PATH,
             initiation_optimization_method=initiation_type,
-            tuning_param=0.3,
+            tuning_param=0.5,
             # orf_sequence="",
         )
     # --------------------------------------------------------------------------------------------------

@@ -222,20 +222,17 @@ def get_reference_genes_for_cai(
 
 
 def calculate_tai_weights(organism_name: str) -> typing.Optional[cb.scores.TrnaAdaptationIndex]:
-    # TODO - move to json file + pre load for multiple organisms or use the API to derive
-    #  taxonomy level from the .gb file
-    organism_name_to_url_mapping = {
-        "Escherichia coli": "http://gtrnadb.ucsc.edu/genomes/bacteria/Esch_coli_K_12_MG1655/",
-        "Bacillus subtilis": "http://gtrnadb.ucsc.edu/genomes/bacteria/Baci_subt_subtilis_168/"
+    # TODO - add option to choose domain (bacteria) and genome_id for tAI inference
+    organism_name_to_gtrna_genome = {
+        "Escherichia coli": "Esch_coli_K_12_MG1655",
+        "Bacillus subtilis": "Baci_subt_subtilis_168"
     }
-    if organism_name not in organism_name_to_url_mapping:
+    if organism_name not in organism_name_to_gtrna_genome:
         logger.info(f"tGCN values were not found for {organism_name}, tAI profile was not calculated.")
         return None
     # TODO - consider using https://github.com/AliYoussef96/gtAI for better results
-    logger.info(f"tGCN values were found for {organism_name}. Calculating tAI profile.")
+    logger.info(f"tGCN values were found for {organism_name} under {organism_name_to_gtrna_genome[organism_name]} . Calculating tAI profile.")
+    url_prefix = "https://gtrnadb.org/genomes/bacteria"
+    url = f"{url_prefix}/{organism_name_to_gtrna_genome[organism_name]}/"
 
-    # Patch for fixing a certificate expiration issue when accessing gtrnadb
-    import ssl
-    ssl._create_default_https_context = ssl._create_unverified_context
-
-    return cb.scores.TrnaAdaptationIndex(url=organism_name_to_url_mapping[organism_name], prokaryote=True)
+    return cb.scores.TrnaAdaptationIndex(url=url, prokaryote=True)
