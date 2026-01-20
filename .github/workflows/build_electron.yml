@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       build_macos:
-        description: "Build macOS app"
+        description: "Build MacOS app"
         required: true
         default: "true"
       build_linux:
@@ -22,7 +22,7 @@ jobs:
   # ==================================================
   build-macos:
     if: ${{ github.event.inputs.build_macos == 'true' }}
-    name: Build macOS Electron App
+    name: Build MacOS Electron App
     runs-on: macos-latest
     continue-on-error: true
 
@@ -166,13 +166,15 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libnss3 libxss1 libasound2
+          sudo apt-get install -y libgtk-3-dev libnss3 libxss1 libasound2t64
 
       # --------------------------------------------------
       # 5. Install Python dependencies
       # --------------------------------------------------
       - name: Install Python dependencies
+        working-directory: app
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
 
@@ -266,7 +268,9 @@ jobs:
       # 4. Install Python dependencies
       # --------------------------------------------------
       - name: Install Python dependencies
+        working-directory: app
         run: |
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
           pip install pyinstaller
 
@@ -274,6 +278,7 @@ jobs:
       # 6. Build standalone FastAPI server
       # --------------------------------------------------
       - name: Build FastAPI backend
+        shell: cmd 
         run: |
           build_fastapi.bat  
 

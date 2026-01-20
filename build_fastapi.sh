@@ -1,4 +1,5 @@
-#!/usr/bin/env zsh
+#!/bin/bash
+set -euo pipefail
 
 # From project root: /Users/.../Igem_TAU_2021
 
