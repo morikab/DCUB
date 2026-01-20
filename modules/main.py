@@ -30,7 +30,8 @@ config = Configuration.read_config()
 
 def run_input_processing(user_input_dict: typing.Optional[typing.Dict[str, typing.Any]] = None) -> models.ModuleInput:
     run_summary = RunSummary()
-    return user_IO.UserInputModule.run_module(user_inp_raw=user_input_dict, run_summary=run_summary)
+    initiation_optimized_codons_num = config["INITIATION"]["NUMBER_OF_CODONS_TO_OPTIMIZE"]
+    return user_IO.UserInputModule.run_module(user_inp_raw=user_input_dict, run_summary=run_summary, initiation_optimized_codons_num=initiation_optimized_codons_num)
 
 
 def run_modules(user_input_dict: typing.Dict[str, typing.Any],

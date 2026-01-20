@@ -136,32 +136,34 @@ class UserInputModule(object):
         gb_path = organism_input["genome_path"]
 
         # FIXME - delete
-        parsed_organism_file_name = f"{gb_path.strip('.gb')}_{optimization_cub_index.value}_parsed"
-        parsed_organism_file = parsed_organism_file_name + ".json"
+        # parsed_organism_file_name = f"{gb_path.strip('.gbff')}_{optimization_cub_index.value}_parsed"
+        # parsed_organism_file = parsed_organism_file_name + ".json"
 
-        # FIXME - delete
-        if os.path.exists(parsed_organism_file):
-            with open(parsed_organism_file) as org_file:
-                organism_data = json.load(org_file)
-                parsed_organism = models.Organism(
-                    name=organism_data["name"], 
-                    cai_profile=organism_data["cai_weights"],
-                    tai_profile=organism_data["tai_weights"],
-                    cai_scores=organism_data["cai_scores"],
-                    tai_scores=organism_data["tai_scores"],
-                    reference_genes=organism_data["reference_genes"],
-                    codon_frequencies=organism_data["codon_frequencies"],
-                    is_optimized=organism_data["is_wanted"],
-                    optimization_priority=organism_data["optimization_priority"],
-                )
-                parsed_organism.is_optimized = is_optimized
-                return parsed_organism
+        # # FIXME - delete
+        # if os.path.exists(parsed_organism_file):
+        #     with open(parsed_organism_file) as org_file:
+        #         organism_data = json.load(org_file)
+        #         parsed_organism = models.Organism(
+        #             name=organism_data["name"], 
+        #             cai_profile=organism_data["cai_weights"],
+        #             tai_profile=organism_data["tai_weights"],
+        #             cai_scores=organism_data["cai_scores"],
+        #             tai_scores=organism_data["tai_scores"],
+        #             reference_genes=organism_data["reference_genes"],
+        #             codon_frequencies=organism_data["codon_frequencies"],
+        #             is_optimized=organism_data["is_wanted"],
+        #             optimization_priority=organism_data["optimization_priority"],
+        #         )
+        #         parsed_organism.is_optimized = is_optimized
+        #         return parsed_organism
         # FIXME - end
                                          
         try:
             with open(gb_path, "r") as gb_file_handle:
                 first_gb_record = next(SeqIO.parse(gb_file_handle, format="genbank"))
             organism_name = " ".join(first_gb_record.description.split()[:2])
+            parsed_organisms_path = "/tamir2/moranb/microbiome/Igem_TAU_2021/analysis/example_data/arabidopsis/arabidopsis_microbiome_processed"
+            parsed_organism_file = os.path.join(parsed_organisms_path, organism_name + ".json")
         except Exception as e:
             raise ValueError(
                 f'Error in genome GenBank file: {gb_path}, make sure you inserted an undamaged .gb file containing '
@@ -223,8 +225,8 @@ class UserInputModule(object):
         org_summary["reference_genes"] = reference_genes
         # write_fasta(fid=organism_name, list_seq=list(cds_dict.values()), list_name=list(cds_dict.keys()))
 
-        # with open(parsed_organism_file, "w") as organism_file:
-        #     json.dump(org_summary, organism_file)
+        with open(parsed_organism_file, "w") as organism_file:
+            json.dump(org_summary, organism_file)
         # FIXME - end
 
         if optimization_cub_index.is_codon_adaptation_index:
