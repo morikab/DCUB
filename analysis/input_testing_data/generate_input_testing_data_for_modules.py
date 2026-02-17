@@ -6,6 +6,7 @@ from pathlib import Path
 from os import listdir
 from os.path import isfile, join
 
+from app.modules import models
 
 current_directory = Path(__file__).parent.resolve()
 base_path = os.path.join(Path(current_directory).parent.resolve(), "example_data")
@@ -19,8 +20,8 @@ DEFAULT_SEQUENCE_FILE_PATH = os.path.join(base_path, "mCherry_original.fasta")
 DEFAULT_ECOLI_MRNA_EXPRESSION_LEVELS_FILE = "ecoli_mrna_level.csv"
 DEFAULT_BACILLUS_MRNA_EXPRESSION_LEVELS_FILE = "bacillus_mrna_level.csv"
 
-DEFAULT_ECOLI_PROTEIN_ABUNDANCE_FILE = "PA_ecoli.json"
-DEFAULT_BACILLUS_PROTEIN_ABUNDANCE_FILE = "PA_bacillus.json"
+DEFAULT_ECOLI_PROTEIN_ABUNDANCE_FILE = "reformatted_PA_ecoli.json"
+DEFAULT_BACILLUS_PROTEIN_ABUNDANCE_FILE = "reformatted_PA_bacillus.json"
 
 
 def generate_random_string(length: int) -> str:
@@ -66,7 +67,7 @@ def generate_testing_data(
         output_path: str = None,
         initiation_optimization_method: str = None,
         evaluation_score: str = None,
-) -> typing.Dict[str, typing.Any]:
+) -> models.UserInput:
     assert (sequence is not None or sequence_file_path is not None), \
         "Should provide either a sequence or a sequence file path"
     assert output_path is not None, "should provide an output path"
@@ -93,26 +94,48 @@ def generate_testing_data(
         "organisms": {},
     }
 
+    output_directory = os.path.join(output_path, F"{orf_optimization_cub_index}_{orf_optimization_method}_"
+                                                 F"wanted_{len(wanted_hosts)}_unwanted_{len(unwanted_hosts)}_"
+                                                 F"{generate_random_string(4)}")
+    Path(output_directory).mkdir(parents=True, exist_ok=True)
+    
+    organisms = {}
     wanted_hosts_weights = wanted_hosts_weights or {}
     unwanted_hosts_weights = unwanted_hosts_weights or {}
 
     for host in wanted_hosts:
-        input_dict["organisms"][host[:-3]] = {
-            "genome_path": os.path.join(genome_path, host),
-            "optimized": True,
-            "expression_csv": None,
-            "optimization_priority": wanted_hosts_weights.get(host) or DEFAULT_ORGANISM_PRIORITY,
-        }
+        organisms[host[:-3]] = models.OrganismRequest(
+            genome_path=os.path.join(genome_path, host),
+            optimized=True,
+            expression_csv_type=None,
+            expression_csv_format=None,
+            expression_csv=None,
+            optimization_priority=wanted_hosts_weights.get(host) or DEFAULT_ORGANISM_PRIORITY,
+        )
 
     for host in unwanted_hosts:
-        input_dict["organisms"][host[:-3]] = {
-            "genome_path": os.path.join(genome_path, host),
-            "optimized": False,
-            "expression_csv": None,
-            "optimization_priority": unwanted_hosts_weights.get(host) or DEFAULT_ORGANISM_PRIORITY,
-        }
+        organisms[host[:-3]] = models.OrganismRequest(
+            genome_path=os.path.join(genome_path, host),
+            optimized=False,
+            expression_csv_type=None,
+            expression_csv_format=None,
+            expression_csv=None,
+            optimization_priority=unwanted_hosts_weights.get(host) or DEFAULT_ORGANISM_PRIORITY,
+        )
 
-    return input_dict
+    user_input = models.UserInput(
+        sequence_file_path=sequence_file_path,
+        sequence=sequence,
+        tuning_param=tuning_param,
+        organisms=organisms,
+        clusters_count=clusters_count,
+        orf_optimization_method=orf_optimization_method,
+        orf_optimization_cub_index=orf_optimization_cub_index,
+        initiation_optimization_method=initiation_optimization_method,
+        output_path=output_directory,
+        evaluation_score=evaluation_score or "average_distance",
+    )
+    return user_input
 
 
 def generate_testing_data_for_ecoli_and_bacillus(
@@ -128,7 +151,7 @@ def generate_testing_data_for_ecoli_and_bacillus(
         should_use_protein_abundance: bool = True,
         evaluation_score: str = None,
         initiation_optimization_method: str = None,
-):
+) -> models.UserInput:
     assert (sequence is not None or sequence_file_path is not None), \
         "Should provide either a sequence or a sequence file path"
 
@@ -152,44 +175,47 @@ def generate_testing_data_for_ecoli_and_bacillus(
         deopt_mrna_levels = DEFAULT_ECOLI_MRNA_EXPRESSION_LEVELS_FILE if should_use_mrna_levels else None
         deopt_protein_abundance = DEFAULT_ECOLI_PROTEIN_ABUNDANCE_FILE if should_use_protein_abundance else None
 
-    inp_dict = {
-        "sequence_file_path": sequence_file_path,
-        "sequence": sequence,
-        "tuning_param": tuning_param,
-        "organisms": {},
-        "clusters_count": clusters_count,
-        "orf_optimization_method": orf_optimization_method,
-        "orf_optimization_cub_index": orf_optimization_cub_index,
-        "initiation_optimization_method": initiation_optimization_method or "original",
-        "output_path": output_directory,
-        "evaluation_score": evaluation_score or "average_distance",
-    }
-
-    expression_csv_type = None
-    opt_expression_csv = None
-    deopt_expression_csv = None
     if should_use_protein_abundance:
-        expression_csv_type = "protein_abundance"
-        opt_expression_csv = os.path.join(base_path, opt_protein_abundance)
-        deopt_expression_csv = os.path.join(base_path, deopt_protein_abundance)
+        expression_type = "protein_abundance"
+        expression_format = "json"
+        opt_expression_file = os.path.join(base_path, opt_protein_abundance)
+        deopt_expression_file = os.path.join(base_path, deopt_protein_abundance)
     elif should_use_mrna_levels:
-        expression_csv_type = "mrna_levels"
-        opt_expression_csv = os.path.join(base_path, opt_mrna_levels)
-        deopt_expression_csv = os.path.join(base_path, deopt_mrna_levels)
-
-    inp_dict['organisms'][opt_genome[:-3]] = {
-        "genome_path": os.path.join(base_path, opt_genome),
-        "optimized": True,
-        "expression_csv_type": expression_csv_type,
-        "expression_csv": opt_expression_csv,
-        "optimization_priority": DEFAULT_ORGANISM_PRIORITY,
+        expression_type = "mrna_levels"
+        expression_format = "csv"
+        opt_expression_file = os.path.join(base_path, opt_mrna_levels)
+        deopt_expression_file = os.path.join(base_path, deopt_mrna_levels)
+        
+    organisms = {
+        opt_genome[:-3]: models.OrganismRequest(
+            genome_path=os.path.join(base_path, opt_genome),
+            optimized=True,
+            expression_data_type=expression_type,
+            expression_file_format=expression_format,
+            expression_file_path=opt_expression_file,
+            optimization_priority=DEFAULT_ORGANISM_PRIORITY,
+        ),
+        deopt_genome[:-3]: models.OrganismRequest(
+            genome_path=os.path.join(base_path, deopt_genome),
+            optimized=False,
+            expression_data_type=expression_type,
+            expression_file_format=expression_format,
+            expression_file_path=deopt_expression_file,
+            optimization_priority=DEFAULT_ORGANISM_PRIORITY,
+        ),
     }
 
-    inp_dict["organisms"][deopt_genome[:-3]] = {
-        "genome_path": os.path.join(base_path, deopt_genome),
-        "optimized": False,
-        "expression_csv_type": expression_csv_type,
-        "expression_csv": deopt_expression_csv,
-        "optimization_priority": DEFAULT_ORGANISM_PRIORITY,
-    }
-    return inp_dict
+    user_input = models.UserInput(
+        sequence_file_path=sequence_file_path,
+        sequence=sequence,
+        tuning_param=tuning_param,
+        organisms=organisms,
+        clusters_count=clusters_count,
+        orf_optimization_method=orf_optimization_method,
+        orf_optimization_cub_index=orf_optimization_cub_index,
+        initiation_optimization_method=initiation_optimization_method or "original",
+        output_path=output_directory,
+        evaluation_score=evaluation_score or "average_distance",
+    )
+
+    return user_input
