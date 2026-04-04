@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DCUB - Differential Codon Usage Bias</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            min-height: 100vh;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 40px 0;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            margin-bottom: 40px;
+        }
+
+        .logo {
+            width: 120px;
+            height: auto;
+            margin-bottom: 20px;
+            opacity: 0.9;
+        }
+
+        h1 {
+            font-size: 3em;
+            font-weight: 700;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            font-size: 1.2em;
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .affiliation {
+            font-size: 1.1em;
+            color: #888;
+            font-weight: 500;
+        }
+
+        .hero {
+            text-align: center;
+            padding: 60px 0;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            margin-bottom: 40px;
+        }
+
+        .hero h2 {
+            font-size: 2.5em;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .hero p {
+            font-size: 1.2em;
+            max-width: 800px;
+            margin: 0 auto 40px;
+            color: #555;
+        }
+
+        .screenshot {
+            max-width: 600px;
+            width: 90%;
+            height: auto;
+            border-radius: 15px;
+            box-shadow: 0 15px 40px rgba(0,0,0,0.15);
+            margin: 0 auto 40px;
+        }
+
+        .downloads {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 30px;
+            margin-top: 40px;
+        }
+
+        .download-card {
+            background: white;
+            border-radius: 20px;
+            padding: 40px 30px;
+            text-align: center;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .download-card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 20px 50px rgba(0,0,0,0.15);
+        }
+
+        .download-icon {
+            font-size: 4em;
+            margin-bottom: 20px;
+        }
+
+        .download-card h3 {
+            font-size: 1.8em;
+            margin-bottom: 15px;
+            color: #333;
+        }
+
+        .download-card p {
+            color: #666;
+            margin-bottom: 30px;
+        }
+
+        .download-btn {
+            display: inline-block;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 40px;
+            text-decoration: none;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 1.1em;
+            transition: all 0.3s ease;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.6);
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 30px;
+            margin: 60px 0;
+        }
+
+        .feature {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 5px 20px rgba(0,0,0,0.05);
+        }
+
+        .feature h4 {
+            font-size: 1.3em;
+            margin-bottom: 10px;
+            color: #333;
+        }
+
+        .feature p {
+            color: #666;
+        }
+
+        footer {
+            text-align: center;
+            padding: 40px 0;
+            color: #888;
+            font-size: 0.9em;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 2.2em;
+            }
+
+            .hero h2 {
+                font-size: 2em;
+            }
+
+            .downloads {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <!-- Replace with actual Tuller Lab logo URL or path, e.g. <img src="assets/tuller-lab-logo.png" alt="Tuller Lab Logo" class="logo"> -->
+            <img src="https://via.placeholder.com/120x120/667eea/ffffff?text=TAU+Tuller+Lab" alt="Tuller Lab Logo" class="logo">
+            <h1>DCUB</h1>
+            <p class="subtitle">Differential Codon Usage Bias</p>
+            <p class="affiliation">Tuller Lab · Tel Aviv University</p>
+        </header>
+
+        <section class="hero">
+            <h2>Download DCUB</h2>
+            <p>DCUB – Differential Codon Usage Bias is a software tool designed to provide researchers with convenient access to the computational model. Featuring a user-friendly graphical interface with advanced configuration options, DCUB enables users to easily tailor the optimization process to suit specific experimental or research needs. The sample screenshot demonstrates DCUB’s integrated workflow that enables researchers to efficiently perform parameterized optimization for their gene of interest and retrieve comprehensive, interpretable results.<web:2></p>
+            [image:1]
+
+            <p style="margin-top: 30px; font-size: 1.1em; color: #666;">
+                Relevant for synthetic biology to minimize horizontal gene transfer in microbiome engineering pipelines.
+            </p>
+        </section>
+
+        <section class="downloads">
+            <div class="download-card">
+                <div class="download-icon">🍎</div>
+                <h3>macOS (64-bit)</h3>
+                <p>Native app for Apple Silicon and Intel Macs.</p>
+                <a href="assets/dcub-macos-x64.dmg" class="download-btn" download>Download for macOS</a>
+            </div>
+            <div class="download-card">
+                <div class="download-icon">🪟</div>
+                <h3>Windows (64-bit)</h3>
+                <p>Installer for Windows 10/11.</p>
+                <a href="assets/dcub-windows-x64.exe" class="download-btn" download>Download for Windows</a>
+            </div>
+            <div class="download-card">
+                <div class="download-icon">🐧</div>
+                <h3>Linux (64-bit)</h3>
+                <p>AppImage for Ubuntu, Fedora, and more.</p>
+                <a href="assets/dcub-linux-x64.AppImage" class="download-btn" download>Download for Linux</a>
+            </div>
+        </section>
+
+        <section class="features">
+            <div class="feature">
+                <h4>🧬 User-Friendly GUI</h4>
+                <p>Intuitive interface matching modern scientific software design.</p>
+            </div>
+            <div class="feature">
+                <h4>⚙️ Advanced Options</h4>
+                <p>Parameterize optimization with codon usage tables and genomes.</p>
+            </div>
+            <div class="feature">
+                <h4>📊 Comprehensive Results</h4>
+                <p>Export interpretable outputs for research and publication.</p>
+            </div>
+            <div class="feature">
+                <h4>🔬 Synthetic Biology</h4>
+                <p>Minimize HGT risks in microbiome engineering workflows.</p>
+            </div>
+        </section>
+
+        <footer>
+            <p>&copy; 2026 Tuller Lab, Tel Aviv University. Developed for synthetic biology research.<web:2></p>
+        </footer>
+    </div>
+</body>
+</html>
