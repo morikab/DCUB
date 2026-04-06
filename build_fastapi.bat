@@ -12,7 +12,7 @@ REM --------------------------------------------------
 for /f "usebackq delims=" %%i in (`
 poetry run python -c "import codonbias, os; print(os.path.join(os.path.dirname(codonbias.__file__), 'genetic_code_ncbi.csv'))"
 `) do set GENETIC_CODE_PATH=%%i
-echo Using genetic_code_ncbi.csv at: %CSV_PATH%
+echo Using genetic_code_ncbi.csv at: %GENETIC_CODE_PATH%
 
 if "%GENETIC_CODE_PATH%"=="" (
     echo ERROR: Failed to locate genetic_code_ncbi.csv
@@ -26,7 +26,7 @@ poetry run pyinstaller ^
   --noconfirm ^
   --onedir ^
   --name fastapi_server ^
-  --add-data "%CSV_PATH%;codonbias" ^
+  --add-data "%GENETIC_CODE_PATH%;codonbias" ^
   --add-data "app\modules\configuration.yaml;modules" ^
   app\api_server.py
 
