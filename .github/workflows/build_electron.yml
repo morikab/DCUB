@@ -52,9 +52,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.9"
-          # cache: "poetry"
-          # cache-dependency-path: |
-          #   poetry.lock
 
       # --------------------------------------------------
       # 4. Install Poetry + Python dependencies
@@ -155,9 +152,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.9"
-          cache: "poetry"
-          cache-dependency-path: |
-            poetry.lock
 
       # --------------------------------------------------
       # 4. Install Electron System dependencies
@@ -170,13 +164,11 @@ jobs:
       # --------------------------------------------------
       # 5. Install Poetry + Python dependencies
       # --------------------------------------------------
-      - name: Install Poetry
+      - name: Install Python dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools wheel
           python -m pip install poetry
-      - name: Install Python dependencies (Poetry)
-        run: |
-          poetry install --no-interaction --with build
+          python -m poetry install --no-interaction --with build
 
       # --------------------------------------------------
       # 6. Build standalone FastAPI server
@@ -260,20 +252,15 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.9"
-          cache: "poetry"
-          cache-dependency-path: |
-            poetry.lock
 
       # --------------------------------------------------
       # 4. Install Poetry + Python dependencies
       # --------------------------------------------------
-      - name: Install Poetry
+      - name: Install Python dependencies
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools wheel
           python -m pip install poetry
-      - name: Install Python dependencies (Poetry)
-        run: |
-          poetry install --no-interaction --with build
+          python -m poetry install --no-interaction --with build
 
       # --------------------------------------------------
       # 6. Build standalone FastAPI server
