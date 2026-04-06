@@ -9,9 +9,15 @@ setlocal ENABLEDELAYEDEXPANSION
 REM --------------------------------------------------
 REM 1. Resolve path to genetic_code_ncbi.csv
 REM --------------------------------------------------
-for /f "delims=" %%i in ('poetry run python -c "import codonbias, os; print(os.path.join(os.path.dirname(codonbias.__file__), ''genetic_code_ncbi.csv''))"') do set CSV_PATH=%%i
-
+for /f "usebackq delims=" %%i in (`
+python -c "import codonbias, os; print(os.path.join(os.path.dirname(codonbias.__file__), 'genetic_code_ncbi.csv'))"
+`) do set GENETIC_CODE_PATH=%%i
 echo Using genetic_code_ncbi.csv at: %CSV_PATH%
+
+if "%GENETIC_CODE_PATH%"=="" (
+    echo ERROR: Failed to locate genetic_code_ncbi.csv
+    exit /b 1
+)
 
 REM --------------------------------------------------
 REM 2. Run PyInstaller
