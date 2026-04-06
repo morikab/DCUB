@@ -9,19 +9,15 @@ setlocal ENABLEDELAYEDEXPANSION
 REM --------------------------------------------------
 REM 1. Resolve path to genetic_code_ncbi.csv
 REM --------------------------------------------------
-for /f "usebackq delims=" %%i in (`
-python - <<EOF
-import codonbias, os
-print(os.path.join(os.path.dirname(codonbias.__file__), "genetic_code_ncbi.csv"))
-EOF
-`) do set CSV_PATH=%%i
+for /f "delims=" %%i in ('poetry run python -c "import codonbias, os; print(os.path.join(os.path.dirname(codonbias.__file__), ''genetic_code_ncbi.csv''))"') do set CSV_PATH=%%i
 
 echo Using genetic_code_ncbi.csv at: %CSV_PATH%
 
 REM --------------------------------------------------
 REM 2. Run PyInstaller
 REM --------------------------------------------------
-pyinstaller ^
+poetry run pyinstaller ^
+  --noconfirm ^
   --onedir ^
   --name fastapi_server ^
   --add-data "%CSV_PATH%;codonbias" ^
