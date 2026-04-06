@@ -10,7 +10,7 @@ REM --------------------------------------------------
 REM 1. Resolve path to genetic_code_ncbi.csv
 REM --------------------------------------------------
 for /f "usebackq delims=" %%i in (`
-python -c "import codonbias, os; print(os.path.join(os.path.dirname(codonbias.__file__), 'genetic_code_ncbi.csv'))"
+poetry run python -c "import codonbias, os; print(os.path.join(os.path.dirname(codonbias.__file__), 'genetic_code_ncbi.csv'))"
 `) do set GENETIC_CODE_PATH=%%i
 echo Using genetic_code_ncbi.csv at: %CSV_PATH%
 
