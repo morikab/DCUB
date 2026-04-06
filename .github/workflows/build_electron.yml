@@ -159,7 +159,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libnss3 libxss1 libasound2
+          sudo apt-get install -y libgtk-3-dev libnss3 libxss1 libasound2t64
 
       # --------------------------------------------------
       # 5. Install Poetry + Python dependencies
@@ -267,7 +267,7 @@ jobs:
       # --------------------------------------------------
       - name: Build FastAPI backend
         run: |
-          build_fastapi.bat  
+          .\build_fastapi.bat  
 
       # --------------------------------------------------
       # 7. Install UI dependencies
