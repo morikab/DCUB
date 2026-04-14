@@ -7,6 +7,8 @@ from modules.shared_functions_and_vars import nt_to_aa
 from modules.shared_functions_and_vars import synonymous_codons
 from modules.shared_functions_and_vars import write_fasta
 
+import json
+
 
 logger = LoggerFactory.get_logger()
 
@@ -118,8 +120,6 @@ class UserInputModule(object):
         # FIXME - delete
         # parsed_organism_file_name = f"{gb_path.strip('.gbff')}_{optimization_cub_index.value}_parsed"
         # parsed_organism_file = parsed_organism_file_name + ".json"
-
-<<<<<<< HEAD:modules/user_IO/user_input.py
         # # FIXME - delete
         # if os.path.exists(parsed_organism_file):
         #     with open(parsed_organism_file) as org_file:
@@ -137,8 +137,6 @@ class UserInputModule(object):
         #         )
         #         parsed_organism.is_optimized = is_optimized
         #         return parsed_organism
-=======
->>>>>>> main:app/modules/user_IO/user_input.py
         # FIXME - end
                                          
         try:
@@ -208,7 +206,7 @@ class UserInputModule(object):
         org_summary["cds_dict"] = cds_dict
         org_summary["reference_genes"] = reference_genes
         # write_fasta(fid=organism_name, list_seq=list(cds_dict.values()), list_name=list(cds_dict.keys()))
-
+        logger.info("about to store parsed organism")
         with open(parsed_organism_file, "w") as organism_file:
             json.dump(org_summary, organism_file)
         # FIXME - end
