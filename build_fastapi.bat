@@ -10,21 +10,23 @@ REM --------------------------------------------------
 REM 1. Resolve path to genetic_code_ncbi.csv
 REM --------------------------------------------------
 for /f "usebackq delims=" %%i in (`
-python - <<EOF
-import codonbias, os
-print(os.path.join(os.path.dirname(codonbias.__file__), "genetic_code_ncbi.csv"))
-EOF
-`) do set CSV_PATH=%%i
+poetry run python -c "import codonbias, os; print(os.path.join(os.path.dirname(codonbias.__file__), 'genetic_code_ncbi.csv'))"
+`) do set GENETIC_CODE_PATH=%%i
+echo Using genetic_code_ncbi.csv at: %GENETIC_CODE_PATH%
 
-echo Using genetic_code_ncbi.csv at: %CSV_PATH%
+if "%GENETIC_CODE_PATH%"=="" (
+    echo ERROR: Failed to locate genetic_code_ncbi.csv
+    exit /b 1
+)
 
 REM --------------------------------------------------
 REM 2. Run PyInstaller
 REM --------------------------------------------------
-pyinstaller ^
+poetry run pyinstaller ^
+  --noconfirm ^
   --onedir ^
   --name fastapi_server ^
-  --add-data "%CSV_PATH%;codonbias" ^
+  --add-data "%GENETIC_CODE_PATH%;codonbias" ^
   --add-data "app\modules\configuration.yaml;modules" ^
   app\api_server.py
 

@@ -1,0 +1,63 @@
+[tool.poetry]
+name = "dcub"
+version = "0.1.0"
+description = "DCUB – Differential Codon Usage Bias"
+authors = ["DCUB contributors"]
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "~3.9"
+
+# Core deps (mirrors app/requirements.txt)
+bio = "1.5.6"
+biopython = "1.81"
+biothings-client = "0.2.6"
+certifi = "2022.12.7"
+charset-normalizer = "3.1.0"
+colorama = "0.4.6"
+gprofiler-official = "1.0.0"
+idna = "3.4"
+joblib = "1.2.0"
+mygene = "3.2.2"
+numpy = "1.26.4"
+packaging = "23.0"
+pandas = ">=2.0,<3"
+platformdirs = "3.1.1"
+pooch = "1.7.0"
+python-dateutil = "2.8.2"
+pytz = "2022.7.1"
+pyyaml = "6.0"
+requests = ">=2.31"
+scikit-learn = "1.0.2"
+scipy = "1.13.1"
+six = "1.16.0"
+threadpoolctl = "3.1.0"
+tqdm = "4.65.0"
+typing-extensions = "4.5.0"
+urllib3 = "1.26.15"
+codon-bias = "0.3.1"
+lxml = "5.3.0"
+html5lib = "~1.1"
+openpyxl = "~3.1.2"
+
+# API server
+fastapi = "*"
+uvicorn = "*"
+
+[tool.poetry.group.analysis]
+optional = true
+
+[tool.poetry.group.analysis.dependencies]
+jupyterlab = "4.3.1"
+matplotlib = "3.9.2"
+
+[tool.poetry.group.build]
+optional = true
+
+[tool.poetry.group.build.dependencies]
+pyinstaller = "*"
+
+[build-system]
+requires = ["poetry-core>=1.9.0"]
+build-backend = "poetry.core.masonry.api"

@@ -29,6 +29,18 @@ After installation, follow the usage instructions from the user guide packaged w
 
 If you prefer to build the tool from source (for development or customization), use the following workflow:
 
+0. **Install Python dependencies (Poetry)**
+
+   - Install [Poetry](https://python-poetry.org/) (one-time), then from the project root run:
+     ```
+     poetry install --with build
+     ```
+   - This repo is configured so `poetry install` creates an in-project virtualenv at `.venv/`.
+   - For notebooks / analysis tooling:
+     ```
+     poetry install --with build,analysis
+     ```
+
 1. **Build the standalone FastAPI server**
 
    - From the project root, run:

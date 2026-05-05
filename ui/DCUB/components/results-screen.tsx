@@ -46,7 +46,7 @@ export function ResultsScreen({ result, onBackToForm, onReset }: ResultsScreenPr
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `commuique_results_${new Date().toISOString().split("T")[0]}.json`
+    a.download = `DCUB_results_${new Date().toISOString().split("T")[0]}.json`
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
