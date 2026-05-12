@@ -3,7 +3,7 @@ import typing
 from dataclasses import dataclass
 from enum import Enum
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Literal
+from typing import Optional, Dict
 
 
 @dataclass
