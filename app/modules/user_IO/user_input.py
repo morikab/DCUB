@@ -143,7 +143,8 @@ class UserInputModule(object):
             with open(gb_path, "r") as gb_file_handle:
                 first_gb_record = next(SeqIO.parse(gb_file_handle, format="genbank"))
             organism_name = " ".join(first_gb_record.description.split()[:2])
-            parsed_organisms_path = "/tamir2/moranb/microbiome/Igem_TAU_2021/analysis/example_data/arabidopsis/arabidopsis_microbiome_processed"
+            parsed_organisms_path = os.path.join(os.path.dirname(os.path.dirname(gb_path)), "arabidopsis_microbiome_processed")
+            os.makedirs(parsed_organisms_path, exist_ok=True)
             parsed_organism_file = os.path.join(parsed_organisms_path, organism_name + ".json")
         except Exception as e:
             raise ValueError(
