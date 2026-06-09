@@ -114,29 +114,56 @@
     </section>
 
     <section id="download" class="py-24 border-t border-slate-100">
-        <div class="max-w-7xl mx-auto px-6">
-            <h2 class="text-3xl font-bold mb-12 text-center text-slate-800">Download Center</h2>
-            <div class="grid md:grid-cols-3 gap-8">
-                <div class="bg-white border border-slate-200 p-8 rounded-lg flex flex-col items-center text-center hover:border-indigo-300 transition">
-                    <span class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-4">Apple Silicon</span>
-                    <h5 class="text-xl font-bold mb-2">macOS arm64-bit</h5>
-                    <p class="text-slate-400 text-xs mb-8">Follow instructions in the downloaded README file</p>
-                    <a href="assets/DCUB-macOS-build.zip" class="w-full py-3 brand-gradient text-white rounded font-medium text-sm hover:opacity-90 transition">Download .dmg</a>
+        <div class="max-w-5xl mx-auto px-6">
+            <div class="text-center mb-14">
+                <h2 class="text-3xl font-bold text-slate-800 mb-3">Download DCUB</h2>
+                <p class="text-slate-400 text-base">Free desktop app. Available for all major platforms.</p>
+            </div>
+
+            <div class="grid md:grid-cols-3 gap-6">
+
+                <!-- macOS -->
+                <div class="bg-white border border-slate-200 rounded-2xl p-8 flex flex-col items-center text-center hover:border-indigo-300 hover:shadow-lg transition-all duration-200">
+                    <div class="mb-6 text-slate-800">
+                        <img src="assets/icon-macos.svg"
+                            alt="macOS"
+                            class="w-14 h-14 object-contain" />
+                    </div>
+                    <h5 class="text-xl font-bold text-slate-800 mb-8">macOS</h5>
+                    <a href="assets/DCUB-macOS-build.zip" download class="mt-auto w-full py-2.5 px-4 bg-slate-900 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="M10.75 2.75a.75.75 0 00-1.5 0v8.614L6.295 8.235a.75.75 0 10-1.09 1.03l4.25 4.5a.75.75 0 001.09 0l4.25-4.5a.75.75 0 00-1.09-1.03l-2.955 3.129V2.75z"/><path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z"/></svg>
+                        Download .dmg
+                    </a>
                 </div>
 
-                <div class="bg-white border border-slate-200 p-8 rounded-lg flex flex-col items-center text-center hover:border-indigo-300 transition ring-2 ring-indigo-50 border-indigo-200">
-                    <span class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-4">Most Common</span>
-                    <h5 class="text-xl font-bold mb-2">Windows 64-bit</h5>
-                    <p class="text-slate-400 text-xs mb-8">Compatible with Win 10/11</p>
-                    <a href="assets/dcub-windows-x64.exe" class="w-full py-3 brand-gradient text-white rounded font-medium text-sm hover:opacity-90 transition">Download .exe</a>
+                <!-- Windows -->
+                <div class="bg-white border border-slate-200 rounded-2xl p-8 flex flex-col items-center text-center hover:border-indigo-300 hover:shadow-lg transition-all duration-200">
+                    <div class="mb-6 text-slate-800">
+                        <img src="assets/icon-windows.svg"
+                            alt="Windows"
+                            class="w-14 h-14 object-contain" />
+                    </div>
+                    <h5 class="text-xl font-bold text-slate-800 mb-8">Windows</h5>
+                    <a href="assets/dcub-windows-x64.exe" class="mt-auto w-full py-2.5 px-4 bg-slate-900 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="M10.75 2.75a.75.75 0 00-1.5 0v8.614L6.295 8.235a.75.75 0 10-1.09 1.03l4.25 4.5a.75.75 0 001.09 0l4.25-4.5a.75.75 0 00-1.09-1.03l-2.955 3.129V2.75z"/><path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z"/></svg>
+                        Download .exe
+                    </a>
                 </div>
 
-                <div class="bg-white border border-slate-200 p-8 rounded-lg flex flex-col items-center text-center hover:border-indigo-300 transition">
-                    <span class="text-[10px] font-bold text-indigo-500 uppercase tracking-widest mb-4">Open Source</span>
-                    <h5 class="text-xl font-bold mb-2">Linux 64-bit</h5>
-                    <p class="text-slate-400 text-xs mb-8">Universal AppImage Build</p>
-                    <a href="assets/dcub-linux-x64.AppImage" class="w-full py-3 brand-gradient text-white rounded font-medium text-sm hover:opacity-90 transition">Download AppImage</a>
+                <!-- Linux -->
+                <div class="bg-white border border-slate-200 rounded-2xl p-8 flex flex-col items-center text-center hover:border-indigo-300 hover:shadow-lg transition-all duration-200">
+                    <div class="mb-6 text-slate-800">
+                        <img src="assets/icon-linux.svg"
+                            alt="Linux"
+                            class="w-14 h-14 object-contain" />
+                    </div>
+                    <h5 class="text-xl font-bold text-slate-800 mb-8">Linux</h5>
+                    <a href="assets/dcub-linux-x64.AppImage" class="mt-auto w-full py-2.5 px-4 bg-slate-900 text-white rounded-lg text-sm font-semibold flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-4 h-4"><path d="M10.75 2.75a.75.75 0 00-1.5 0v8.614L6.295 8.235a.75.75 0 10-1.09 1.03l4.25 4.5a.75.75 0 001.09 0l4.25-4.5a.75.75 0 00-1.09-1.03l-2.955 3.129V2.75z"/><path d="M3.5 12.75a.75.75 0 00-1.5 0v2.5A2.75 2.75 0 004.75 18h10.5A2.75 2.75 0 0018 15.25v-2.5a.75.75 0 00-1.5 0v2.5c0 .69-.56 1.25-1.25 1.25H4.75c-.69 0-1.25-.56-1.25-1.25v-2.5z"/></svg>
+                        Download AppImage
+                    </a>
                 </div>
+
             </div>
         </div>
     </section>
