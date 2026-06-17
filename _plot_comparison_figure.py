@@ -10,6 +10,8 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
 from matplotlib.lines import Line2D
 from matplotlib.gridspec import GridSpec
 import numpy as np
@@ -122,141 +124,219 @@ print(f"CUB cluster scores: { {k: round(v,3) for k,v in sorted(cub_cl_scores.ite
 ova["k2p_cluster"] = ova["wanted_organisms"].map(k2p_assign)
 ova["cub_cluster"] = ova["wanted_organisms"].map(cub_assign)
 
-# ── 4. Silhouette scores (aggregated per cluster, ± std) ─────────────────────
+# ── 4. Per-organism silhouette scores (for scatter in Panel B) ───────────────
 k2p_sil = silhouette_samples(k2p_dist_df.loc[k2p_names, k2p_names].values,
                               k2p_lbl_k4, metric="precomputed")
 cub_sil = silhouette_samples(cub_dist_df.loc[cai_names, cai_names].values,
                               cub_lbl_k4, metric="precomputed")
 
-k2p_sil_agg = (pd.DataFrame({"sil": k2p_sil, "cluster": k2p_lbl_k4})
-               .groupby("cluster")["sil"].agg(mean="mean", std="std")
-               .reindex(range(1, 5)))
-cub_sil_agg = (pd.DataFrame({"sil": cub_sil, "cluster": cub_lbl_k4})
-               .groupby("cluster")["sil"].agg(mean="mean", std="std")
-               .reindex(range(1, 5)))
+# Per-organism table: name | k2p_sil | k2p_cluster | cub_sil | cub_cluster
+k2p_sil_df = pd.DataFrame({"org": k2p_names, "k2p_sil": k2p_sil, "k2p_cluster": k2p_lbl_k4})
+cub_sil_df = pd.DataFrame({"org": cai_names,  "cub_sil": cub_sil, "cub_cluster": cub_lbl_k4})
+sil_df = k2p_sil_df.merge(cub_sil_df, on="org")
+sil_df["same_cluster"] = sil_df["k2p_cluster"] == sil_df["cub_cluster"]
 
-print(f"\nK2P silhouette:\n{k2p_sil_agg.round(3)}")
-print(f"\nCUB silhouette:\n{cub_sil_agg.round(3)}")
+print(f"\nSilhouette scatter data (n={len(sil_df)}):")
+print(sil_df[["org","k2p_cluster","k2p_sil","cub_cluster","cub_sil"]].round(3).to_string())
 
-# ── 5. Build figure ───────────────────────────────────────────────────────────
+# ── 5. Within-cluster dispersions for K2P and CUB clusters ───────────────────
+def _mean_tri(dist_df, members):
+    if len(members) < 2:
+        return 0.0
+    sub = dist_df.loc[members, members].values
+    return sub[np.triu_indices(len(members), 1)].mean()
+
+k2p_disp_rows = []
+for cid in range(1, 5):
+    members = [nm for nm, cl in k2p_assign.items() if cl == cid]
+    k2p_disp_rows.append(dict(cluster=cid, n=len(members),
+        k2p_disp=_mean_tri(k2p_dist_df, members),
+        cub_disp=_mean_tri(cub_dist_df, members),
+        score=k2p_cl_scores.get(cid, np.nan)))
+k2p_disp_df = pd.DataFrame(k2p_disp_rows)
+
+cub_disp_rows = []
+for cid in range(1, 5):
+    members = [nm for nm, cl in cub_assign.items() if cl == cid]
+    cub_disp_rows.append(dict(cluster=cid, n=len(members),
+        k2p_disp=_mean_tri(k2p_dist_df, members),
+        cub_disp=_mean_tri(cub_dist_df, members),
+        score=cub_cl_scores.get(cid, np.nan)))
+cub_disp_df = pd.DataFrame(cub_disp_rows)
+
+print(f"\nK2P cluster dispersions:\n{k2p_disp_df.round(4).to_string()}")
+print(f"\nCUB cluster dispersions:\n{cub_disp_df.round(4).to_string()}")
+
+# ── 6. Build figure ───────────────────────────────────────────────────────────
 sns.set(style="whitegrid", context="paper", font_scale=1.1)
 np.random.seed(42)
 
 fig = plt.figure(figsize=(14, 11), facecolor=BG)
-fig.suptitle("Clustered Optimization Performance", fontsize=16, fontweight="bold", y=0.997)
+fig.suptitle("Clustered Optimization Performance", fontsize=16, fontweight="bold", y=0.97)
+fig.subplots_adjust(top=0.90)
 
-gs   = GridSpec(2, 2, figure=fig, height_ratios=[1.15, 1.0], hspace=0.48, wspace=0.36)
+gs    = GridSpec(2, 2, figure=fig, height_ratios=[1.15, 1.0], hspace=0.52, wspace=0.42)
 ax_a1 = fig.add_subplot(gs[0, 0])
 ax_a2 = fig.add_subplot(gs[0, 1])
-ax_b  = fig.add_subplot(gs[1, :])
+ax_b  = fig.add_subplot(gs[1, 0])   # Panel B: CUB compactness vs opt score
+ax_c  = fig.add_subplot(gs[1, 1])   # Panel C: K2P vs CUB dispersion
 
-# Cluster size lookup for axis labels
 k2p_cl_sizes = {int(c): k2p_sizes.get(int(c), "?") for c in range(1, 5)}
 cub_cl_sizes = {int(c): cub_sizes.get(int(c), "?") for c in range(1, 5)}
 
-CL_PAL = ["#4E79A7", "#F28E2B", "#E15759", "#76B7B2"]
+CL_PAL      = ["#4E79A7", "#F28E2B", "#E15759", "#76B7B2"]
+K2P_COLOR   = "#4E79A7"
+CUB_COLOR   = "#E15759"
+DARK_GREEN  = "#2d6a27"
+ORANGE      = "#F28E2B"
+cmap_score  = cm.RdYlGn
 
-# ── Panel A helper ────────────────────────────────────────────────────────────
-def _panel_a(ax, cl_scores, cl_sizes, ova_df, cluster_col, score_col, title, panel_label):
-    cids      = sorted(int(c) for c in cl_scores)
-    cl_colors = {cid: CL_PAL[i] for i, cid in enumerate(cids)}
-    x_pos     = {cid: i for i, cid in enumerate(cids)}
+all_scores = pd.concat([k2p_disp_df["score"], cub_disp_df["score"]]).dropna()
+score_norm = mcolors.Normalize(vmin=all_scores.min(), vmax=all_scores.max())
+
+# Shared Y range for Panel A — cluster scores + per-cluster medians
+k2p_meds = [ova.loc[ova["k2p_cluster"] == c, SCORE].dropna().median()
+            for c in range(1, 5)]
+cub_meds = [ova.loc[ova["cub_cluster"] == c, SCORE].dropna().median()
+            for c in range(1, 5)]
+all_a_vals = (list(k2p_cl_scores.values()) + list(cub_cl_scores.values()) +
+              [v for v in k2p_meds + cub_meds if not np.isnan(v)])
+a_ymin = min(all_a_vals) - 0.25
+a_ymax = max(all_a_vals) + 0.25
+
+# Bubble size for Panels B/C (proportional to n, no size legend)
+all_n = list(k2p_disp_df["n"]) + list(cub_disp_df["n"])
+def _bsz(n_val):
+    return 80 + 400 * (n_val - min(all_n)) / max(max(all_n) - min(all_n), 1)
+
+# ── Panel A helper: line chart — cluster score vs per-cluster median org score ──
+def _panel_a(ax, cl_scores, cl_sizes, cluster_col, prefix, title, panel_label):
+    cids    = sorted(int(c) for c in cl_scores)
+    x_pos   = list(range(len(cids)))
 
     ax.set_facecolor(BG)
-    ax.grid(True, axis="y", color="#d4dadb", linestyle="--", linewidth=0.8, zorder=0)
+    ax.grid(True, color="#d4dadb", linestyle="-", linewidth=0.8, zorder=0)
 
-    for cid in cids:
-        x   = x_pos[cid]
-        col = cl_colors[cid]
+    cl_vals  = [cl_scores[cid] for cid in cids]
+    med_vals = [ova.loc[ova[cluster_col] == cid, SCORE].dropna().median()
+                for cid in cids]
 
-        # Individual organism scores — jittered scatter
-        org_sc = ova_df.loc[ova_df[cluster_col] == cid, score_col].dropna().values
-        jitter = np.random.uniform(-0.22, 0.22, size=len(org_sc))
-        ax.scatter(x + jitter, org_sc, color=col, s=45, alpha=0.55,
-                   edgecolor="white", linewidth=0.4, zorder=3)
+    ax.plot(x_pos, cl_vals, color=DARK_GREEN, linewidth=2.0,
+            marker="s", markersize=8, zorder=4, label="Cluster")
+    ax.plot(x_pos, med_vals, color=ORANGE, linewidth=1.8,
+            marker="o", markersize=7, linestyle="--", zorder=3,
+            label="Individual wanted organisms (median)")
 
-        # Cluster aggregate score — horizontal line + diamond
-        cs = cl_scores[cid]
-        ax.plot([x - 0.38, x + 0.38], [cs, cs], color=col,
-                lw=3.0, zorder=4, alpha=0.92, solid_capstyle="round")
-        ax.scatter(x, cs, color=col, s=180, marker="D",
-                   edgecolor="black", linewidth=1.2, zorder=5)
-
-    ax.set_xticks(list(x_pos.values()))
+    ax.set_xticks(x_pos)
     ax.set_xticklabels(
-        [f"Cluster {c}\n(n={cl_sizes.get(c,'?')})" for c in cids],
-        fontsize=9.5
-    )
-    ax.set_xlabel("Cluster", fontsize=10)
-    ax.set_ylabel("Avg. distance score (z-score)", fontsize=9)
+        [f"{prefix}-C{c}\n(n={cl_sizes.get(c,'?')})" for c in cids], fontsize=9.5)
+    ax.set_ylim(a_ymin, a_ymax)
+    ax.set_xlabel("Cluster", fontsize=10, fontweight="bold")
+    ax.set_ylabel("Optimization Score", fontsize=10, fontweight="bold")
     ax.set_title(title, fontweight="bold", pad=10, fontsize=11)
     ax.text(-0.10, 1.07, panel_label, transform=ax.transAxes,
             fontsize=14, fontweight="bold", va="bottom", ha="left", clip_on=False)
-
-    legend_elems = [
-        Line2D([0], [0], marker="D", color="w", markerfacecolor="#555",
-               markeredgecolor="black", markersize=10, label="Cluster score"),
-        Line2D([0], [0], marker="o", color="w", markerfacecolor="#888",
-               markersize=8, alpha=0.6, label="Single-org score"),
-    ]
-    ax.legend(handles=legend_elems, fontsize=8, loc="upper right", framealpha=0.9)
+    ax.legend(fontsize=8, loc="upper right", framealpha=0.9)
     sns.despine(ax=ax)
 
-
-_panel_a(ax_a1, k2p_cl_scores, k2p_cl_sizes, ova, "k2p_cluster", SCORE,
+_panel_a(ax_a1, k2p_cl_scores, k2p_cl_sizes, "k2p_cluster", "K2P",
          "K2P Clustering (k = 4)", "A.")
-_panel_a(ax_a2, cub_cl_scores, cub_cl_sizes, ova, "cub_cluster", SCORE,
+_panel_a(ax_a2, cub_cl_scores, cub_cl_sizes, "cub_cluster", "CUB",
          "CUB Clustering (k = 4)", "")
 
-# ── Panel B: grouped silhouette bars ─────────────────────────────────────────
+# ── shared annotation helper ──────────────────────────────────────────────────
+def _ann(ax, x, y, txt, ox, oy):
+    ax.annotate(txt, xy=(x, y), xytext=(ox, oy), textcoords="offset points",
+                fontsize=8.2, color="#222",
+                bbox=dict(boxstyle="round,pad=0.25", facecolor="white",
+                          edgecolor="none", alpha=0.88),
+                zorder=6)
+
+# ── Panel B: CUB compactness vs opt score — K2P (circles) + CUB (triangles) ──
 ax_b.set_facecolor(BG)
-ax_b.grid(True, axis="y", color="#d4dadb", linestyle="--", linewidth=0.8, zorder=0)
+ax_b.grid(True, color="#d4dadb", linestyle="--", linewidth=0.8, zorder=0)
 
-xs    = np.arange(4)
-BAR_W = 0.34
-K2P_C = "#4E79A7"
-CUB_C = "#E15759"
+# Offsets chosen from actual coordinates (see docstring above)
+# K2P: C1(0.072,5.80) C2(0.011,1.68) C3(0.091,3.17) C4(0.182,2.64)
+# CUB: C1(0.080,6.67) C2(0.064,3.03) C3(0.091,3.17)=same C4(0.000,3.82)
+_lab_b_k2p = {1: (9, 6), 2: (9, 6), 3: (9, 14), 4: (9, -18)}
+_lab_b_cub = {1: (9, 8), 2: (9, -18), 3: (9, -20), 4: (9, 6)}
 
-k2p_means = k2p_sil_agg["mean"].values.astype(float)
-k2p_stds  = k2p_sil_agg["std"].fillna(0).values.astype(float)
-cub_means = cub_sil_agg["mean"].values.astype(float)
-cub_stds  = cub_sil_agg["std"].fillna(0).values.astype(float)
+for _, row in k2p_disp_df.iterrows():
+    cid = int(row.cluster)
+    ax_b.scatter(row.cub_disp, row.score, s=_bsz(row.n),
+                 color=K2P_COLOR, marker="o", edgecolor="black", linewidth=1.1,
+                 zorder=4, alpha=0.85)
+    ox, oy = _lab_b_k2p[cid]
+    _ann(ax_b, row.cub_disp, row.score, f"K2P-C{cid} (n={int(row.n)})", ox, oy)
 
-bars_k2p = ax_b.bar(xs - BAR_W/2, k2p_means, BAR_W, yerr=k2p_stds, capsize=6,
-                    color=K2P_C, alpha=0.82, edgecolor="black", linewidth=0.8,
-                    label="K2P clusters", error_kw={"elinewidth": 1.6, "ecolor": "#333"},
-                    zorder=3)
-bars_cub = ax_b.bar(xs + BAR_W/2, cub_means, BAR_W, yerr=cub_stds, capsize=6,
-                    color=CUB_C, alpha=0.82, edgecolor="black", linewidth=0.8,
-                    label="CUB clusters", error_kw={"elinewidth": 1.6, "ecolor": "#333"},
-                    zorder=3)
+for _, row in cub_disp_df.iterrows():
+    cid = int(row.cluster)
+    if pd.isna(row.score): continue
+    ax_b.scatter(row.cub_disp, row.score, s=_bsz(row.n),
+                 color=CUB_COLOR, marker="^", edgecolor="black", linewidth=1.1,
+                 zorder=4, alpha=0.85)
+    ox, oy = _lab_b_cub[cid]
+    _ann(ax_b, row.cub_disp, row.score, f"CUB-C{cid} (n={int(row.n)})", ox, oy)
 
-# Value labels above each bar
-for bars, means in [(bars_k2p, k2p_means), (bars_cub, cub_means)]:
-    for bar, val in zip(bars, means):
-        if not np.isnan(val):
-            ax_b.text(bar.get_x() + bar.get_width()/2,
-                      bar.get_height() + max(k2p_stds.max(), cub_stds.max()) + 0.008,
-                      f"{val:.2f}", ha="center", va="bottom",
-                      fontsize=8.5, fontweight="bold", color="#222")
-
-ax_b.axhline(0, color="#555", linewidth=1.0, linestyle="--", zorder=2)
-
-# x-axis: show cluster sizes for both methods
-xtick_labels = [
-    f"Cluster {i+1}\nK2P n={k2p_cl_sizes.get(i+1,'?')} / CUB n={cub_cl_sizes.get(i+1,'?')}"
-    for i in range(4)
-]
-ax_b.set_xticks(xs)
-ax_b.set_xticklabels(xtick_labels, fontsize=9)
-ax_b.set_xlabel("Cluster", fontsize=11)
-ax_b.set_ylabel("Mean silhouette score  (± std)", fontsize=10.5)
-ax_b.set_title("B.  Within-Cluster Cohesion: Mean Silhouette Score per Cluster",
-               fontweight="bold", pad=10, fontsize=11, loc="left")
-ax_b.legend(fontsize=10, framealpha=0.9)
+x_vals_b = list(k2p_disp_df["cub_disp"]) + list(cub_disp_df["cub_disp"])
+ax_b.set_xlim(-0.005, max(x_vals_b) * 1.45)
+ax_b.set_xlabel("Within-cluster CUB dispersion", fontsize=10, fontweight="bold")
+ax_b.set_ylabel("Cluster optimization score", fontsize=10, fontweight="bold")
+ax_b.set_title("CUB Compactness vs. Optimization Score",
+               fontweight="bold", pad=8, fontsize=11)
+ax_b.text(-0.14, 1.07, "B.", transform=ax_b.transAxes,
+          fontsize=14, fontweight="bold", va="bottom", ha="left", clip_on=False)
+ax_b.legend(handles=[
+    Line2D([0],[0], marker="o", color="w", markerfacecolor=K2P_COLOR,
+           markeredgecolor="black", markersize=9, label="K2P cluster"),
+    Line2D([0],[0], marker="^", color="w", markerfacecolor=CUB_COLOR,
+           markeredgecolor="black", markersize=9, label="CUB cluster"),
+], fontsize=8.5, loc="upper right", framealpha=0.9)
 sns.despine(ax=ax_b)
 
-out = os.path.join(REPO_ROOT, "graph_comparison_k2p_vs_cub_performance.pdf")
-fig.savefig(out, dpi=300, bbox_inches="tight", facecolor=BG)
+# ── Panel C: K2P vs CUB dispersion + identity line (K2P clusters only) ────────
+ax_c.set_facecolor(BG)
+ax_c.grid(True, color="#d4dadb", linestyle="--", linewidth=0.8, zorder=0)
+
+# Equal-scale axes to make identity line meaningful
+c_lim = max(k2p_disp_df["k2p_disp"].max(), k2p_disp_df["cub_disp"].max()) * 1.18
+ax_c.plot([0, c_lim], [0, c_lim], color="#888", linewidth=1.3,
+          linestyle="--", zorder=1)
+ax_c.set_xlim(0, c_lim)
+ax_c.set_ylim(0, c_lim)
+
+# Offsets: C1(0.072,0.072) C2(0.011,0.011) C3(0.015,0.091) C4(0.026,0.182)
+_lab_c = {1: (9, 6), 2: (9, -18), 3: (9, 6), 4: (9, 6)}
+
+for _, row in k2p_disp_df.iterrows():
+    cid = int(row.cluster)
+    col = cmap_score(score_norm(row.score))
+    ax_c.scatter(row.k2p_disp, row.cub_disp, s=_bsz(row.n),
+                 color=col, marker="o", edgecolor="black", linewidth=1.1,
+                 zorder=3, alpha=0.90)
+    ox, oy = _lab_c[cid]
+    _ann(ax_c, row.k2p_disp, row.cub_disp, f"K2P-C{cid} (n={int(row.n)})", ox, oy)
+
+# Label the identity line
+ax_c.text(c_lim * 0.62, c_lim * 0.55, "K2P = CUB",
+          fontsize=8, color="#888", rotation=45, va="center", ha="center",
+          rotation_mode="anchor")
+
+ax_c.set_xlabel("Within-cluster K2P dispersion", fontsize=10, fontweight="bold")
+ax_c.set_ylabel("Within-cluster CUB dispersion", fontsize=10, fontweight="bold")
+ax_c.set_title("Cluster Compactness: K2P vs. CUB Space",
+               fontweight="bold", pad=8, fontsize=11)
+ax_c.text(-0.14, 1.07, "C.", transform=ax_c.transAxes,
+          fontsize=14, fontweight="bold", va="bottom", ha="left", clip_on=False)
+
+sm = cm.ScalarMappable(cmap=cmap_score, norm=score_norm)
+sm.set_array([])
+cb = fig.colorbar(sm, ax=ax_c, shrink=0.72, pad=0.03, aspect=18)
+cb.set_label("Optimization score", fontsize=9, fontweight="bold")
+sns.despine(ax=ax_c)
+
+out = os.path.join(REPO_ROOT, "graph_comparison_k2p_vs_cub_performance.svg")
+fig.savefig(out, bbox_inches="tight", facecolor=BG)
 plt.close(fig)
 print(f"\nSaved: {out} ({os.path.getsize(out):,} bytes)")
