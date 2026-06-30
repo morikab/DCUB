@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { CheckCircle, AlertCircle, Settings } from "lucide-react"
+import { Settings, HelpCircle } from "lucide-react"
 import { useOptimizationStore } from "@/lib/store"
 import { DnaSequenceInput } from "@/components/dna-sequence-input"
 import { OrganismList } from "@/components/organism-list"
@@ -13,17 +13,24 @@ import { validateSubmission } from "@/lib/validation"
 import { AdvancedOptionsPanel } from "@/components/advanced-options-panel"
 import { LoadingScreen } from "@/components/loading-screen"
 import { ResultsScreen } from "@/components/results-screen"
+import { ErrorDialog } from "@/components/error-dialog"
 import type { OptimizationResult } from "@/lib/types"
 
 export default function DNAOptimizerPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [submitStatus, setSubmitStatus] = useState<"idle" | "success" | "error">("idle")
+  const [submitStatus, setSubmitStatus] = useState<"idle" | "success">("idle")
   const [submitMessage, setSubmitMessage] = useState("")
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false)
+  const [errorText, setErrorText] = useState("")
   const [showAdvancedOptions, setShowAdvancedOptions] = useState(false)
+  const [showHelp, setShowHelp] = useState(false)
+  const [showHelpTooltip, setShowHelpTooltip] = useState(false)
+  const [showAdvTooltip, setShowAdvTooltip] = useState(false)
   const [optimizationResult, setOptimizationResult] = useState<OptimizationResult | null>(null)
   const [showResults, setShowResults] = useState(false)
 
-  const { dnaSequence, sequenceFile, wantedOrganisms, unwantedOrganisms, reset } = useOptimizationStore()
+  const { dnaSequence, sequenceFile, sequenceFilePath, wantedOrganisms, unwantedOrganisms, reset } =
+    useOptimizationStore()
 
   const handleSubmit = async () => {
     setIsSubmitting(true)
@@ -41,8 +48,8 @@ export default function DNAOptimizerPage() {
       })
 
       if (!validation.isValid) {
-        setSubmitStatus("error")
-        setSubmitMessage(validation.errors?.join(", ") || "Validation failed")
+        setErrorText(validation.errors?.join(", ") || "Validation failed")
+        setErrorDialogOpen(true)
         return
       }
 
@@ -83,7 +90,7 @@ export default function DNAOptimizerPage() {
       // Prepare JSON payload in the new structure
       const optimizationPayload = {
         user_input_dict: {
-          sequence_file_path: sequenceFile ? sequenceFile.name : null,
+          sequence_file_path: sequenceFile ? sequenceFilePath : null,
           sequence: dnaSequence,
           tuning_param: currentState.tuningParameter / 100, // Convert to 0-1 range
           organisms: organismsObject,
@@ -115,8 +122,8 @@ export default function DNAOptimizerPage() {
       clearTimeout(timeoutId)
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ error: "Unknown error" }))
-        throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`)
+        const errorData = await response.json().catch(() => ({ detail: "Unknown error" }))
+        throw new Error(errorData.detail || errorData.error || `HTTP ${response.status}: ${response.statusText}`)
       }
 
       const raw_response = await response.json()
@@ -134,17 +141,17 @@ export default function DNAOptimizerPage() {
       reset()
     } catch (error) {
       console.error("Optimization error:", error)
-      setSubmitStatus("error")
 
       if (error instanceof Error && error.name === "AbortError") {
-        setSubmitMessage("Request timed out. The optimization process took too long to complete.")
+        setErrorText("Request timed out. The optimization process took too long to complete.")
       } else if (error instanceof TypeError && error.message.includes("fetch")) {
-        setSubmitMessage(
+        setErrorText(
           "Unable to connect to the optimization server. Please ensure the backend is running on localhost:8000 and CORS is properly configured.",
         )
       } else {
-        setSubmitMessage(`Optimization failed: ${error instanceof Error ? error.message : "Unknown error"}`)
+        setErrorText(error instanceof Error ? error.message : "Unknown error")
       }
+      setErrorDialogOpen(true)
     } finally {
       setIsSubmitting(false)
     }
@@ -214,13 +221,22 @@ export default function DNAOptimizerPage() {
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
       {/* Advanced Options Side Button */}
       <div className="fixed right-4 top-1/2 transform -translate-y-1/2 z-50">
-        <Button
-          onClick={() => setShowAdvancedOptions(true)}
-          className="rounded-full w-12 h-12 shadow-lg bg-blue-600 hover:bg-blue-700"
-          size="sm"
-        >
-          <Settings className="w-5 h-5" />
-        </Button>
+        <div className="relative">
+          <Button
+            onClick={() => setShowAdvancedOptions(true)}
+            onMouseEnter={() => setShowAdvTooltip(true)}
+            onMouseLeave={() => setShowAdvTooltip(false)}
+            className="rounded-full w-12 h-12 shadow-lg bg-blue-600 hover:bg-blue-700"
+            size="sm"
+          >
+            <Settings className="w-5 h-5" />
+          </Button>
+          {showAdvTooltip && (
+            <div style={{ position: "absolute", right: "100%", marginRight: 8, top: "50%", transform: "translateY(-50%)", backgroundColor: "#1f2937", color: "white", fontSize: "0.75rem", borderRadius: 4, padding: "2px 8px", whiteSpace: "nowrap", pointerEvents: "none" }}>
+              Advanced options
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Advanced Options Panel */}
@@ -240,12 +256,64 @@ export default function DNAOptimizerPage() {
         {/* Main Content */}
         <Card className="shadow-lg">
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
-              Optimization Configuration
-            </CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="flex items-center gap-2">
+                <div className="w-2 h-2 bg-blue-500 rounded-full"></div>
+                Optimization Configuration
+              </CardTitle>
+              <div className="relative">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowHelp((v) => !v)}
+                  onMouseEnter={() => setShowHelpTooltip(true)}
+                  onMouseLeave={() => setShowHelpTooltip(false)}
+                  className="text-gray-400 hover:text-gray-600"
+                  aria-label="Toggle help"
+                >
+                  <HelpCircle className="w-5 h-5" />
+                </Button>
+                {showHelpTooltip && (
+                  <div style={{ position: "absolute", right: 0, top: "100%", marginTop: 4, backgroundColor: "#1f2937", color: "white", fontSize: "0.75rem", borderRadius: 4, padding: "2px 8px", whiteSpace: "nowrap", zIndex: 10, pointerEvents: "none" }}>
+                    Instructions
+                  </div>
+                )}
+              </div>
+            </div>
             <CardDescription>Configure all parameters for your DNA sequence optimization process</CardDescription>
           </CardHeader>
+
+          {showHelp && (
+            <div className="px-6 pb-2">
+              <div className="rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm space-y-3">
+                <div className="flex gap-3">
+                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-white text-xs font-bold flex-shrink-0 mt-0.5" style={{ backgroundColor: "#9ca3af" }}>1</span>
+                  <div className="text-blue-800">
+                    <span className="font-semibold">DNA Sequence — </span>
+                    Enter a raw sequence or FASTA format directly, or upload a .fasta / .fa file.
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-white text-xs font-bold flex-shrink-0 mt-0.5" style={{ backgroundColor: "#16a34a" }}>2</span>
+                  <div className="text-blue-800">
+                    <span className="font-semibold">Wanted Organisms — </span>
+                    Organisms you want your gene expressed in. Each needs a GenBank genome file (.gb), a priority score (1–100; higher = more weight), and optionally a JSON or CSV file with gene-level expression data.
+                  </div>
+                </div>
+                <div className="flex gap-3">
+                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-white text-xs font-bold flex-shrink-0 mt-0.5" style={{ backgroundColor: "#dc2626" }}>3</span>
+                  <div className="text-blue-800">
+                    <span className="font-semibold">Unwanted Organisms — </span>
+                    Organisms where expression should be minimized. Same fields as step 2.
+                  </div>
+                </div>
+                <div className="border-t border-blue-200 pt-3 text-blue-700 text-xs">
+                  <strong>Advanced Options</strong> — use the ⚙ button (floating, right side) to tune the optimization algorithm and parameters.
+                </div>
+              </div>
+            </div>
+          )}
+
           <CardContent className="space-y-6">
             {/* DNA Sequence Input */}
             <DnaSequenceInput />
@@ -254,11 +322,11 @@ export default function DNAOptimizerPage() {
             <Tabs defaultValue="wanted" className="w-full">
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="wanted" className="flex items-center gap-2">
-                  <CheckCircle className="w-4 h-4" />
+                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: "#16a34a" }}>2</span>
                   Wanted Organisms
                 </TabsTrigger>
                 <TabsTrigger value="unwanted" className="flex items-center gap-2">
-                  <AlertCircle className="w-4 h-4" />
+                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: "#dc2626" }}>3</span>
                   Unwanted Organisms
                 </TabsTrigger>
               </TabsList>
@@ -273,13 +341,9 @@ export default function DNAOptimizerPage() {
             </Tabs>
 
             {/* Submit Status */}
-            {submitStatus !== "idle" && (
-              <Alert
-                className={submitStatus === "success" ? "border-green-200 bg-green-50" : "border-red-200 bg-red-50"}
-              >
-                <AlertDescription className={submitStatus === "success" ? "text-green-800" : "text-red-800"}>
-                  {submitMessage}
-                </AlertDescription>
+            {submitStatus === "success" && (
+              <Alert className="border-green-200 bg-green-50">
+                <AlertDescription className="text-green-800">{submitMessage}</AlertDescription>
               </Alert>
             )}
 
@@ -305,59 +369,9 @@ export default function DNAOptimizerPage() {
           </CardContent>
         </Card>
 
-        {/* Instructions */}
-        <Card className="bg-blue-50 border-blue-200">
-          <CardHeader>
-            <CardTitle className="text-blue-900">Instructions</CardTitle>
-          </CardHeader>
-          <CardContent className="text-blue-800 space-y-2">
-            <p>
-              <strong>1. DNA Sequence:</strong> Enter your sequence manually or upload a FASTA file
-            </p>
-            <p>
-              <strong>2. Wanted Organisms:</strong> Add organisms you want to optimize for with their GenBank genome
-              files (.gb/.gbf) and priorities
-            </p>
-            <p>
-              <strong>3. Unwanted Organisms:</strong> Add organisms you want to avoid with their GenBank genome files
-              (.gb/.gbf) and priorities
-            </p>
-            <p>
-              <strong>4. Priority Scores:</strong> Use values between 1-100 (higher = more important)
-            </p>
-            <p>
-              <strong>5. Expression Data:</strong> Optionally provide CSV files with expression data for each organism
-            </p>
-            <p>
-              <strong>6. Advanced Options:</strong> Click the settings button to configure tuning parameters and
-              optimization methods
-            </p>
-          </CardContent>
-        </Card>
-
-        {/* CORS Notice for Development */}
-        <Card className="bg-yellow-50 border-yellow-200">
-          <CardHeader>
-            <CardTitle className="text-yellow-900 text-base">Development Notice</CardTitle>
-          </CardHeader>
-          <CardContent className="text-yellow-800 text-sm">
-            <p>
-              <strong>For local development:</strong> Ensure your backend server at localhost:8000 has CORS enabled to
-              allow requests from this web application.
-            </p>
-            <p className="mt-2">
-              <strong>GenBank Files:</strong> Genome files must be in GenBank format (.gb or .gbf extensions).
-            </p>
-            <p className="mt-2">
-              <strong>Processing Time:</strong> Optimization can take several minutes to complete. Please be patient
-              while the server processes your request.
-            </p>
-            <p className="mt-2">
-              <strong>API Endpoint:</strong> Requests are sent to http://localhost:8000/run-modules
-            </p>
-          </CardContent>
-        </Card>
       </div>
+
+      <ErrorDialog open={errorDialogOpen} errorText={errorText} onClose={() => setErrorDialogOpen(false)} />
     </div>
   )
 }

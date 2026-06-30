@@ -20,7 +20,7 @@ export function DnaSequenceInput() {
   const [displayText, setDisplayText] = useState("") // Store the original FASTA text for display
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const { dnaSequence, sequenceFile, setDnaSequence, setSequenceFile } = useOptimizationStore()
+  const { dnaSequence, sequenceFile, setDnaSequence, setSequenceFile, setSequenceFilePath } = useOptimizationStore()
 
   // Function to parse FASTA format and extract sequence only
   const parseFastaSequence = (fastaText: string): { sequence: string; title: string } => {
@@ -44,6 +44,7 @@ export function DnaSequenceInput() {
 
   const handleTextChange = (value: string) => {
     setSequenceFile(null)
+    setSequenceFilePath("")
     setSequenceInfo(null)
     setDisplayText(value) // Always store the original input for display
 
@@ -133,6 +134,10 @@ export function DnaSequenceInput() {
       // Complete upload
       setUploadProgress(100)
       setSequenceFile(file)
+      // For web browsers, we can't get the full path due to security restrictions
+      // But we can simulate it or use the webkitRelativePath if available
+      const fullPath = (file as any).path || file.webkitRelativePath || `/path/to/${file.name}`
+      setSequenceFilePath(fullPath)
       setDnaSequence(sequence) // Store only the sequence for API
       setDisplayText("") // Clear manual entry when file is uploaded
       setSequenceInfo({
@@ -153,6 +158,7 @@ export function DnaSequenceInput() {
 
   const removeFile = () => {
     setSequenceFile(null)
+    setSequenceFilePath("")
     setSequenceInfo(null)
     setValidationError("")
     setDnaSequence("")
@@ -184,7 +190,7 @@ CTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGCTGTAG`
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <FileText className="w-5 h-5" />
+          <span className="inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-xs font-bold flex-shrink-0" style={{ backgroundColor: "#9ca3af" }}>1</span>
           DNA Sequence Input
         </CardTitle>
         <CardDescription>Enter your DNA sequence manually or upload a FASTA file for optimization</CardDescription>
@@ -250,6 +256,7 @@ ATGCGATCGATCGATCGATCG...`}
           </div>
 
           <input ref={fileInputRef} type="file" accept=".fasta,.fa" onChange={handleFileUpload} className="hidden" />
+          <p className="text-xs text-gray-500">Accepted formats: .fasta, .fa (Max 10MB)</p>
 
           {isUploading && (
             <div className="space-y-2">
@@ -304,20 +311,6 @@ ATGCGATCGATCGATCGATCG...`}
           <div className="text-red-600 text-sm bg-red-50 p-3 rounded-md border border-red-200">{validationError}</div>
         )}
 
-        {/* Info */}
-        <div className="text-sm text-gray-500 bg-gray-50 p-3 rounded-md">
-          <p>
-            <strong>Input Processing:</strong>
-          </p>
-          <ul className="list-disc list-inside mt-1 space-y-1">
-            <li>Your original input (including headers) is preserved in the text box</li>
-            <li>Only the DNA sequence content is extracted and sent for optimization</li>
-            <li>Supports both FASTA format and raw sequence input</li>
-            <li>Headers and formatting are automatically parsed but not included in processing</li>
-            <li>Sequences are cleaned and validated before optimization</li>
-            <li>File size limit: 10MB</li>
-          </ul>
-        </div>
       </CardContent>
     </Card>
   )
