@@ -339,7 +339,7 @@ app.on('ready', async () => {
     });
 
     nextProcess.on('exit', (code) => {
-      cpnsole.log('Next.js server exited with code:', code)
+      console.log('Next.js server exited with code:', code)
       nextProcess = null;
       if (code !== 0) {
         app.quit();
