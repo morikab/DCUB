@@ -10,12 +10,13 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Trash2, Download, Upload, FileText, X } from "lucide-react"
+import { Plus, Trash2, Download, Upload, FileText, X, ChevronDown, ChevronUp } from "lucide-react"
 import { useOptimizationStore } from "@/lib/store"
 import type { Organism } from "@/lib/types"
+import { ErrorDialog } from "@/components/error-dialog"
 
 const downloadExpressionSample = (
-  format: "csv" | "json" = "csv", 
+  format: "csv" | "json" = "json",
   dataType: "protein_abundance" | "mrna_levels" = "mrna_levels"
 ) => {
   let content = ""
@@ -123,9 +124,14 @@ export function OrganismList({ type }: OrganismListProps) {
     genomePath: "",
     priority: undefined,
     expressionDataPath: "",
-    expressionDataFormat: "csv",
+    expressionDataFormat: "json",
     expressionDataType: "protein_abundance",
   })
+  const [formResetKey, setFormResetKey] = useState(0)
+  const [isExpressionDataOpen, setIsExpressionDataOpen] = useState(false)
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false)
+  const [errorDialogText, setErrorDialogText] = useState("")
+  const nameInputRef = useRef<HTMLInputElement>(null)
 
   const {
     wantedOrganisms,
@@ -139,6 +145,7 @@ export function OrganismList({ type }: OrganismListProps) {
   } = useOptimizationStore()
 
   const organisms = type === "wanted" ? wantedOrganisms : unwantedOrganisms
+  const opposingOrganisms = type === "wanted" ? unwantedOrganisms : wantedOrganisms
   const addOrganism = type === "wanted" ? addWantedOrganism : addUnwantedOrganism
   const removeOrganism = type === "wanted" ? removeWantedOrganism : removeUnwantedOrganism
   const updateOrganism = type === "wanted" ? updateWantedOrganism : updateUnwantedOrganism
@@ -148,6 +155,25 @@ export function OrganismList({ type }: OrganismListProps) {
     const validPriorities = organisms.filter((org) => org.priority !== undefined).map((org) => org.priority!)
     if (validPriorities.length === 0) return 50
     return Math.round(validPriorities.reduce((sum, p) => sum + p, 0) / validPriorities.length)
+  }
+
+  const trimmedNewName = newOrganism.name?.trim().toLowerCase()
+  const isDuplicateNewName = !!trimmedNewName && organisms.some((org) => org.name.toLowerCase() === trimmedNewName)
+
+  const trimmedNewPath = newOrganism.genomePath?.trim() || ""
+  const isDuplicateInSameList = !!trimmedNewPath && organisms.some((org) => org.genomePath.trim() === trimmedNewPath)
+  const isDuplicateInOpposingList = !!trimmedNewPath && opposingOrganisms.some((org) => org.genomePath.trim() === trimmedNewPath)
+  const isDuplicateGenomePath = isDuplicateInSameList || isDuplicateInOpposingList
+
+  const handleGenomePathChange = (value: string) => {
+    setNewOrganism((prev) => ({ ...prev, genomePath: value }))
+    const trimmed = value.trim()
+    if (trimmed && opposingOrganisms.some((org) => org.genomePath.trim() === trimmed)) {
+      setErrorDialogText(
+        `This genome file is already used by an organism in the ${type === "wanted" ? "unwanted" : "wanted"} organisms list. Each organism must have a unique genome file.`
+      )
+      setErrorDialogOpen(true)
+    }
   }
 
   const handleAddOrganism = () => {
@@ -169,9 +195,12 @@ export function OrganismList({ type }: OrganismListProps) {
       genomePath: "",
       priority: undefined,
       expressionDataPath: "",
-      expressionDataFormat: "csv",
+      expressionDataFormat: "json",
       expressionDataType: "protein_abundance",
     })
+    setFormResetKey((key) => key + 1)
+    setIsExpressionDataOpen(false)
+    nameInputRef.current?.focus()
   }
 
   return (
@@ -194,11 +223,25 @@ export function OrganismList({ type }: OrganismListProps) {
           <OrganismCard
             key={organism.id}
             organism={organism}
+            otherOrganismNames={organisms
+              .filter((other) => other.id !== organism.id)
+              .map((other) => other.name.toLowerCase())}
+            otherGenomePaths={[
+              ...organisms.filter((other) => other.id !== organism.id).map((other) => other.genomePath.trim()),
+              ...opposingOrganisms.map((other) => other.genomePath.trim()),
+            ].filter(Boolean)}
             onUpdate={(updated) => updateOrganism(organism.id, updated)}
             onRemove={() => removeOrganism(organism.id)}
           />
         ))}
       </div>
+
+      <ErrorDialog
+        open={errorDialogOpen}
+        title="Duplicate genome file"
+        errorText={errorDialogText}
+        onClose={() => setErrorDialogOpen(false)}
+      />
 
       {/* Add New Organism */}
       <Card className="border-dashed border-2">
@@ -213,10 +256,16 @@ export function OrganismList({ type }: OrganismListProps) {
             <Label htmlFor="organism-name">Organism Name *</Label>
             <Input
               id="organism-name"
+              ref={nameInputRef}
               placeholder="e.g., Escherichia-coli, Bacillus-subtilis"
               value={newOrganism.name || ""}
               onChange={(e) => setNewOrganism((prev) => ({ ...prev, name: e.target.value }))}
             />
+            {isDuplicateNewName && (
+              <p className="text-sm text-amber-600">
+                An organism named &quot;{newOrganism.name?.trim()}&quot; already exists in this list.
+              </p>
+            )}
           </div>
           <div className="space-y-2">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -235,21 +284,30 @@ export function OrganismList({ type }: OrganismListProps) {
                 </div>
                 <div className="flex-1 min-h-[120px]">
                   <FileInput
+                    key={`genome-${formResetKey}`}
                     id="genome-path"
                     placeholder="/path/to/genome.db"
                     value={newOrganism.genomePath || ""}
-                    onChange={(value) => setNewOrganism((prev) => ({ ...prev, genomePath: value }))}
+                    onChange={handleGenomePathChange}
                     accept=".gb,.gbf,.gbff,.gbk"
                     fileType="GenBank"
                     onOrganismNameSuggestion={(suggestedName) => {
-                      // Only update if the name field is empty
                       if (!newOrganism.name?.trim()) {
                         setNewOrganism((prev) => ({ ...prev, name: suggestedName }))
                       }
                     }}
                   />
                 </div>
-                
+                {isDuplicateInSameList && (
+                  <p className="text-sm text-amber-600">
+                    This genome file is already used by another organism in this list.
+                  </p>
+                )}
+                {isDuplicateInOpposingList && !isDuplicateInSameList && (
+                  <p className="text-sm text-amber-600">
+                    This genome file is already used by an organism in the {type === "wanted" ? "unwanted" : "wanted"} organisms list.
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <div/>
@@ -276,88 +334,103 @@ export function OrganismList({ type }: OrganismListProps) {
               </div>
             </div>
             <div className="border rounded-lg p-4 space-y-4">
-              <div>
+              <button
+                type="button"
+                onClick={() => setIsExpressionDataOpen((open) => !open)}
+                className="flex items-center justify-between w-full text-left"
+              >
                 <h3 className="text-base font-semibold">Expression Data (Optional)</h3>
-                <p className="text-sm text-gray-600">
-                  {newOrganism.expressionDataFormat === 'json' ?
-                    (newOrganism.expressionDataType === 'protein_abundance' ?
-                    'For protein abundance, we expect each json record to contain "gene" and "protein_abundance" fields.' :
-                    'For mRNA levels, we expect each json record to contain "gene" and "mRNA_level" fields.') : 
-                    (newOrganism.expressionDataType === 'protein_abundance' ?
-                      'For protein abundance, we expect the csv to contain "gene" and "protein_abundance" columns.' :
-                      'For mRNA levels, we expect the csv to contain "gene" "mRNA_level" columns.')
-                  }
-                </p>
-              </div>
+                {isExpressionDataOpen ? (
+                  <ChevronUp className="w-4 h-4 text-gray-500" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-gray-500" />
+                )}
+              </button>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 items-start">
-                {/* Left side */}
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="expression-format">File Format</Label>
-                    <Select
-                      value={newOrganism.expressionDataFormat}
-                      onValueChange={(value: "csv" | "json") =>
-                        setNewOrganism((prev) => ({ ...prev, expressionDataFormat: value }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select format" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="csv">CSV</SelectItem>
-                        <SelectItem value="json">JSON</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="expression-type">Data Type</Label>
-                    <Select
-                      value={newOrganism.expressionDataType}
-                      onValueChange={(value: "protein_abundance" | "mrna_levels") =>
-                        setNewOrganism((prev) => ({ ...prev, expressionDataType: value }))
-                      }
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="Select type" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="protein_abundance">Protein Abundance</SelectItem>
-                        <SelectItem value="mrna_levels">mRNA Levels</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
+              {isExpressionDataOpen && (
+                <>
+                  <p className="text-sm text-gray-600">
+                    {newOrganism.expressionDataFormat === 'json' ?
+                      (newOrganism.expressionDataType === 'protein_abundance' ?
+                      'For protein abundance, we expect each json record to contain "gene" and "protein_abundance" fields.' :
+                      'For mRNA levels, we expect each json record to contain "gene" and "mRNA_level" fields.') :
+                      (newOrganism.expressionDataType === 'protein_abundance' ?
+                        'For protein abundance, we expect the csv to contain "gene" and "protein_abundance" columns.' :
+                        'For mRNA levels, we expect the csv to contain "gene" "mRNA_level" columns.')
+                    }
+                  </p>
 
-                {/* Right side */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <Label>Expression File</Label>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => downloadExpressionSample(newOrganism.expressionDataFormat, newOrganism.expressionDataType)}
-                      className="text-blue-600 hover:text-blue-800"
-                    >
-                      <Download className="w-4 h-4 mr-1" />
-                      Sample
-                    </Button>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 items-start">
+                    {/* Left side */}
+                    <div className="space-y-4">
+                      <div className="space-y-2">
+                        <Label htmlFor="expression-format">File Format</Label>
+                        <Select
+                          value={newOrganism.expressionDataFormat}
+                          onValueChange={(value: "csv" | "json") =>
+                            setNewOrganism((prev) => ({ ...prev, expressionDataFormat: value }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select format" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="csv">CSV</SelectItem>
+                            <SelectItem value="json">JSON</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="expression-type">Data Type</Label>
+                        <Select
+                          value={newOrganism.expressionDataType}
+                          onValueChange={(value: "protein_abundance" | "mrna_levels") =>
+                            setNewOrganism((prev) => ({ ...prev, expressionDataType: value }))
+                          }
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select type" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="protein_abundance">Protein Abundance</SelectItem>
+                            <SelectItem value="mrna_levels">mRNA Levels</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+
+                    {/* Right side */}
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between">
+                        <Label>Expression File</Label>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => downloadExpressionSample(newOrganism.expressionDataFormat, newOrganism.expressionDataType)}
+                          className="text-blue-600 hover:text-blue-800"
+                        >
+                          <Download className="w-4 h-4 mr-1" />
+                          Sample
+                        </Button>
+                      </div>
+                      <FileInput
+                        key={`expression-${formResetKey}`}
+                        id="expression-path"
+                        placeholder={`/path/to/expression_data.${newOrganism.expressionDataFormat}`}
+                        value={newOrganism.expressionDataPath || ""}
+                        onChange={(value) => setNewOrganism((prev) => ({ ...prev, expressionDataPath: value }))}
+                        accept={`.${newOrganism.expressionDataFormat}`}
+                        fileType={newOrganism.expressionDataFormat?.toUpperCase() || "DATA"}
+                      />
+                    </div>
                   </div>
-                  <FileInput
-                    id="expression-path"
-                    placeholder={`/path/to/expression_data.${newOrganism.expressionDataFormat}`}
-                    value={newOrganism.expressionDataPath || ""}
-                    onChange={(value) => setNewOrganism((prev) => ({ ...prev, expressionDataPath: value }))}
-                    accept={`.${newOrganism.expressionDataFormat}`}
-                    fileType={newOrganism.expressionDataFormat?.toUpperCase() || "DATA"}
-                  />
-                </div>
-              </div>
+                </>
+              )}
             </div>
           </div>
           <Button
             onClick={handleAddOrganism}
-            disabled={!newOrganism.genomePath?.trim() || !newOrganism.name?.trim()}
+            disabled={!newOrganism.genomePath?.trim() || !newOrganism.name?.trim() || isDuplicateNewName || isDuplicateGenomePath}
             className="w-full"
           >
             <Plus className="w-4 h-4 mr-2" />
@@ -371,31 +444,73 @@ export function OrganismList({ type }: OrganismListProps) {
 
 interface OrganismCardProps {
   organism: Organism
+  otherOrganismNames: string[]
+  otherGenomePaths: string[]
   onUpdate: (organism: Organism) => void
   onRemove: () => void
 }
 
-function OrganismCard({ organism, onUpdate, onRemove }: OrganismCardProps) {
+function OrganismCard({ organism, otherOrganismNames, otherGenomePaths, onUpdate, onRemove }: OrganismCardProps) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const [isExpressionDataOpen, setIsExpressionDataOpen] = useState(!!organism.expressionDataPath)
+
   const getDisplayPath = (fullPath: string) => {
     if (!fullPath) return ""
     return fullPath.split("/").pop() || fullPath
+  }
+
+  const isDuplicateName = otherOrganismNames.includes(organism.name.trim().toLowerCase())
+  const isDuplicateGenomePath = !!organism.genomePath.trim() && otherGenomePaths.includes(organism.genomePath.trim())
+
+  if (!isExpanded) {
+    return (
+      <Card>
+        <CardContent className="py-3">
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setIsExpanded(true)}
+              className="flex flex-1 items-center gap-2 min-w-0 text-left"
+            >
+              <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />
+              <Badge variant="secondary" className="font-medium">
+                {organism.name}
+              </Badge>
+              <Badge variant="outline">Priority: {organism.priority}</Badge>
+              <span className="text-sm text-gray-500 truncate">{getDisplayPath(organism.genomePath)}</span>
+              {organism.expressionDataPath && (
+                <Badge variant="outline" className="text-green-700 border-green-300">
+                  Expression data
+                </Badge>
+              )}
+            </button>
+            <Button variant="ghost" size="sm" onClick={onRemove} className="text-red-500 hover:text-red-700">
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+    )
   }
 
   return (
     <Card>
       <CardContent className="pt-6">
         <div className="flex items-start justify-between mb-4">
-          <div className="flex-1">
-            <div className="flex items-center gap-2 mb-2">
-              <Badge variant="secondary" className="font-medium">
-                {organism.name}
-              </Badge>
-              <Badge variant="outline">Priority: {organism.priority}</Badge>
-              <Button variant="ghost" size="sm" onClick={onRemove} className="text-red-500 hover:text-red-700">
-                <Trash2 className="w-4 h-4" />
-              </Button>
-            </div>
-          </div>
+          <button
+            type="button"
+            onClick={() => setIsExpanded(false)}
+            className="flex flex-1 items-center gap-2 text-left"
+          >
+            <ChevronUp className="w-4 h-4 text-gray-400" />
+            <Badge variant="secondary" className="font-medium">
+              {organism.name}
+            </Badge>
+            <Badge variant="outline">Priority: {organism.priority}</Badge>
+          </button>
+          <Button variant="ghost" size="sm" onClick={onRemove} className="text-red-500 hover:text-red-700">
+            <Trash2 className="w-4 h-4" />
+          </Button>
         </div>
 
         <div className="space-y-4">
@@ -407,6 +522,11 @@ function OrganismCard({ organism, onUpdate, onRemove }: OrganismCardProps) {
               value={organism.name}
               onChange={(e) => onUpdate({ ...organism, name: e.target.value })}
             />
+            {isDuplicateName && (
+              <p className="text-sm text-amber-600">
+                An organism named &quot;{organism.name.trim()}&quot; already exists in this list.
+              </p>
+            )}
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -420,10 +540,14 @@ function OrganismCard({ organism, onUpdate, onRemove }: OrganismCardProps) {
                 fileType="GenBank"
                 displayValue={getDisplayPath(organism.genomePath)}
                 onOrganismNameSuggestion={(suggestedName) => {
-                  // Update organism name with suggested name
                   onUpdate({ ...organism, name: suggestedName })
                 }}
               />
+              {isDuplicateGenomePath && (
+                <p className="text-sm text-amber-600">
+                  This genome file is already used by another organism.
+                </p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -444,88 +568,102 @@ function OrganismCard({ organism, onUpdate, onRemove }: OrganismCardProps) {
           </div>
 
           <div className="border rounded-lg p-4 space-y-4">
-            <div>
+            <button
+              type="button"
+              onClick={() => setIsExpressionDataOpen((open) => !open)}
+              className="flex items-center justify-between w-full text-left"
+            >
               <h3 className="text-base font-semibold">Expression Data (Optional)</h3>
-              <p className="text-sm text-gray-600">
-                {(organism.expressionDataFormat || 'csv') === 'json' ?
-                  ((organism.expressionDataType || 'protein_abundance') === 'protein_abundance' ?
-                 'For protein abundance, we expect each json record to contain "gene" and "protein_abundance" fields.' :
-                    'For mRNA levels, we expect each json record to contain "gene" and "mRNA_level" fields.') : 
+              {isExpressionDataOpen ? (
+                <ChevronUp className="w-4 h-4 text-gray-500" />
+              ) : (
+                <ChevronDown className="w-4 h-4 text-gray-500" />
+              )}
+            </button>
+
+            {isExpressionDataOpen && (
+              <>
+                <p className="text-sm text-gray-600">
+                  {(organism.expressionDataFormat || 'json') === 'json' ?
                     ((organism.expressionDataType || 'protein_abundance') === 'protein_abundance' ?
-                      'For protein abundance, we expect the csv to contain "gene" and "protein_abundance" columns.' :
-                      'For mRNA levels, we expect the csv to contain "gene" "mRNA_level" columns.')
-                  }
-              </p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 items-start">
-              {/* Left side */}
-              <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="expression-format">File Format</Label>
-                  <Select
-                    value={organism.expressionDataFormat || 'csv'}
-                    onValueChange={(value: "csv" | "json") =>
-                      onUpdate({ ...organism, expressionDataFormat: value })
+                   'For protein abundance, we expect each json record to contain "gene" and "protein_abundance" fields.' :
+                      'For mRNA levels, we expect each json record to contain "gene" and "mRNA_level" fields.') :
+                      ((organism.expressionDataType || 'protein_abundance') === 'protein_abundance' ?
+                        'For protein abundance, we expect the csv to contain "gene" and "protein_abundance" columns.' :
+                        'For mRNA levels, we expect the csv to contain "gene" "mRNA_level" columns.')
                     }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select format" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="csv">CSV</SelectItem>
-                      <SelectItem value="json">JSON</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="expression-type">Data Type</Label>
-                  <Select
-                    value={organism.expressionDataType || 'protein_abundance'}
-                    onValueChange={(value: "protein_abundance" | "mrna_levels") =>
-                      onUpdate({ ...organism, expressionDataType: value })
-                    }
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select type" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="protein_abundance">Protein Abundance</SelectItem>
-                      <SelectItem value="mrna_levels">mRNA Levels</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+                </p>
 
-              {/* Right side */}
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label>Expression File</Label>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => downloadExpressionSample(organism.expressionDataFormat || 'csv', organism.expressionDataType || 'protein_abundance')}
-                    className="text-blue-600 hover:text-blue-800"
-                  >
-                    <Download className="w-4 h-4 mr-1" />
-                    Sample
-                  </Button>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2 items-start">
+                  {/* Left side */}
+                  <div className="space-y-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="expression-format">File Format</Label>
+                      <Select
+                        value={organism.expressionDataFormat || 'json'}
+                        onValueChange={(value: "csv" | "json") =>
+                          onUpdate({ ...organism, expressionDataFormat: value })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select format" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="csv">CSV</SelectItem>
+                          <SelectItem value="json">JSON</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="expression-type">Data Type</Label>
+                      <Select
+                        value={organism.expressionDataType || 'protein_abundance'}
+                        onValueChange={(value: "protein_abundance" | "mrna_levels") =>
+                          onUpdate({ ...organism, expressionDataType: value })
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select type" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="protein_abundance">Protein Abundance</SelectItem>
+                          <SelectItem value="mrna_levels">mRNA Levels</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* Right side */}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label>Expression File</Label>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => downloadExpressionSample(organism.expressionDataFormat || 'json', organism.expressionDataType || 'protein_abundance')}
+                        className="text-blue-600 hover:text-blue-800"
+                      >
+                        <Download className="w-4 h-4 mr-1" />
+                        Sample
+                      </Button>
+                    </div>
+                    <FileInput
+                      placeholder={`/path/to/expression_data.${organism.expressionDataFormat || 'json'}`}
+                      value={organism.expressionDataPath || ""}
+                      onChange={(value) =>
+                        onUpdate({
+                          ...organism,
+                          expressionDataPath: value || undefined,
+                        })
+                      }
+                      accept={`.${organism.expressionDataFormat || 'json'}`}
+                      fileType={(organism.expressionDataFormat || "DATA").toUpperCase()}
+                      displayValue={organism.expressionDataPath ? getDisplayPath(organism.expressionDataPath) : ""}
+                    />
+                  </div>
                 </div>
-                <FileInput
-                  placeholder={`/path/to/expression_data.${organism.expressionDataFormat || 'csv'}`}
-                  value={organism.expressionDataPath || ""}
-                  onChange={(value) =>
-                    onUpdate({
-                      ...organism,
-                      expressionDataPath: value || undefined,
-                    })
-                  }
-                  accept={`.${organism.expressionDataFormat || 'csv'}`}
-                  fileType={(organism.expressionDataFormat || "DATA").toUpperCase()}
-                  displayValue={organism.expressionDataPath ? getDisplayPath(organism.expressionDataPath) : ""}
-                />
-              </div>
-            </div>
+              </>
+            )}
           </div>
         </div>
       </CardContent>
@@ -558,12 +696,10 @@ function FileInput({
   const [uploadProgress, setUploadProgress] = useState(0)
   const [uploadedFile, setUploadedFile] = useState<File | null>(null)
   const [validationError, setValidationError] = useState("")
+  const [isDragOver, setIsDragOver] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0]
-    if (!file) return
-
+  const processFile = async (file: File) => {
     // Validate file type
     const fileExtension = file.name.toLowerCase().split(".").pop()
     const acceptedExtensions = accept.split(",").map((ext) => ext.trim().replace(".", ""))
@@ -622,9 +758,9 @@ function FileInput({
       // Complete upload
       setUploadProgress(100)
       setUploadedFile(file)
-      // For web browsers, we can't get the full path due to security restrictions
-      // But we can simulate it or use the webkitRelativePath if available
-      const fullPath = (file as any).path || file.webkitRelativePath || `/path/to/${file.name}`
+      // Electron exposes file.path on File objects; browsers don't (security restriction).
+      // webkitRelativePath is only set for directory pickers. Fall back to the filename alone.
+      const fullPath = (file as any).path || file.webkitRelativePath || file.name
       onChange(fullPath)
 
       if (fileType === "GenBank" && id === "genome-path") {
@@ -648,6 +784,11 @@ function FileInput({
     }
   }
 
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (file) processFile(file)
+  }
+
   const removeFile = () => {
     setUploadedFile(null)
     setValidationError("")
@@ -657,75 +798,167 @@ function FileInput({
     }
   }
 
-  const handleBrowseClick = () => {
+  const handleBrowseClick = async () => {
+    const electronAPI = typeof window !== "undefined" ? (window as any).electronAPI : null
+    if (electronAPI?.isElectron) {
+      const extensions = accept.split(",").map((e: string) => e.trim().replace(".", ""))
+      let result: any
+      try {
+        result = await electronAPI.fileOperations("select-file", {
+          filters: [{ name: `${fileType} Files`, extensions }],
+        })
+      } catch {
+        setValidationError("Error opening file dialog. Please try again.")
+        return
+      }
+      if (!result?.success) return  // canceled
+
+      const { filePath, fileName, content } = result
+
+      const fileExtension = (fileName as string).toLowerCase().split(".").pop() || ""
+      const acceptedExtensions = accept.split(",").map((e: string) => e.trim().replace(".", ""))
+      if (!acceptedExtensions.includes(fileExtension)) {
+        setValidationError(`Please upload a ${fileType} file (${accept})`)
+        return
+      }
+
+      setIsUploading(true)
+      setUploadProgress(50)
+      setValidationError("")
+
+      if (fileType === "GenBank") {
+        if (!content.includes("LOCUS") || !content.includes("ORIGIN")) {
+          setValidationError("Invalid GenBank format. File must contain LOCUS and ORIGIN sections.")
+          setIsUploading(false)
+          setUploadProgress(0)
+          return
+        }
+      }
+      if (fileType === "CSV") {
+        const lines = (content as string).split("\n")
+        if (lines.length < 2) {
+          setValidationError("CSV file must contain at least a header row and one data row.")
+          setIsUploading(false)
+          setUploadProgress(0)
+          return
+        }
+      }
+
+      setUploadProgress(100)
+      onChange(filePath)
+
+      if (fileType === "GenBank" && id === "genome-path" && onOrganismNameSuggestion) {
+        onOrganismNameSuggestion((fileName as string).replace(/\.(gb|gbff|gbk)$/i, ""))
+      }
+
+      setTimeout(() => { setIsUploading(false); setUploadProgress(0) }, 500)
+      return
+    }
+
     fileInputRef.current?.click()
   }
 
+  const handleDrop = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setIsDragOver(false)
+    if (isUploading) return
+    const file = event.dataTransfer.files?.[0]
+    if (file) processFile(file)
+  }
+
+  const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setIsDragOver(true)
+  }
+
+  const handleDragLeave = (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setIsDragOver(false)
+  }
+
+  const baseName = (path: string) => path.split("/").pop() || path
+  const hasValue = !!value
+  const selectedLabel = displayValue || (uploadedFile ? uploadedFile.name : value ? baseName(value) : "")
+  const acceptedFormatsLabel =
+    fileType === "GenBank"
+      ? "Accepted formats: .gb, .gbf, .gbff, .gbk (Max: 50MB)"
+      : `Accepted format: ${accept} (Max: 10MB)`
+
   return (
     <div className="space-y-2">
-      <div className="flex gap-2">
-        <Input
-          id={id}
-          placeholder={placeholder}
-          value={displayValue || value} // Use displayValue if provided
-          onChange={(e) => onChange(e.target.value)}
-          className="flex-1"
-        />
-        <Button
-          type="button"
-          onClick={handleBrowseClick}
-          variant="outline"
-          size="sm"
-          className="px-3 bg-transparent"
-          disabled={isUploading}
-        >
-          <Upload className="w-4 h-4" />
-        </Button>
-      </div>
-
-      <input ref={fileInputRef} type="file" accept={accept} onChange={handleFileUpload} className="hidden" />
-
-      {/* Upload Progress */}
-      {isUploading && (
-        <div className="space-y-2">
+      {isUploading ? (
+        <div className="space-y-2 rounded-md border-2 border-dashed border-gray-300 p-4">
           <div className="flex justify-between text-sm">
             <span>Uploading {fileType} file...</span>
             <span>{uploadProgress}%</span>
           </div>
           <Progress value={uploadProgress} className="w-full h-2" />
         </div>
-      )}
-
-      {/* Uploaded File Display */}
-      {uploadedFile && !isUploading && (
-        <div className="flex items-center gap-2 p-2 bg-green-50 border border-green-200 rounded-md">
-          <FileText className="w-4 h-4 text-green-600" />
-          <span className="text-sm text-green-800 flex-1">{uploadedFile.name}</span>
-          <span className="text-xs text-green-600">{(uploadedFile.size / 1024).toFixed(1)} KB</span>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={removeFile}
-            className="text-red-500 hover:text-red-700 h-6 w-6 p-0"
-          >
-            <X className="w-3 h-3" />
-          </Button>
+      ) : (
+        <div
+          onClick={handleBrowseClick}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          role="button"
+          tabIndex={0}
+          className={`flex flex-col items-center justify-center gap-1 rounded-md border-2 border-dashed p-4 text-center cursor-pointer transition-colors ${
+            isDragOver
+              ? "border-blue-500 bg-blue-50"
+              : hasValue
+                ? "border-green-300 bg-green-50"
+                : "border-gray-300 hover:border-gray-400 hover:bg-gray-50"
+          }`}
+        >
+          {hasValue ? (
+            <div className="flex w-full items-center gap-2">
+              <FileText className="w-5 h-5 text-green-600 flex-shrink-0" />
+              <div className="flex-1 min-w-0 text-left">
+                <p className="text-sm text-green-800 truncate">{selectedLabel}</p>
+                <p className="text-xs text-green-600">
+                  {uploadedFile ? `${(uploadedFile.size / 1024).toFixed(1)} KB · ` : ""}
+                  Click or drop to replace
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  removeFile()
+                }}
+                className="h-6 w-6 p-0 text-red-500 hover:text-red-700 flex-shrink-0"
+              >
+                <X className="w-3 h-3" />
+              </Button>
+            </div>
+          ) : (
+            <>
+              <Upload className="w-6 h-6 text-gray-400" />
+              <p className="text-sm font-medium text-gray-700">Click to upload or drag and drop</p>
+              <p className="text-xs text-gray-500">{acceptedFormatsLabel}</p>
+            </>
+          )}
         </div>
       )}
+
+      <input ref={fileInputRef} type="file" accept={accept} onChange={handleFileUpload} className="hidden" />
+
+      {/* Manual path entry, as a fallback to drag-and-drop / browse */}
+      <Input
+        id={id}
+        placeholder={`Or paste a file path, e.g. ${placeholder}`}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        disabled={isUploading}
+        className="text-sm"
+      />
 
       {/* Validation Error */}
       {validationError && (
         <div className="text-red-600 text-sm bg-red-50 p-2 rounded-md border border-red-200">{validationError}</div>
       )}
-
-      {/* File Type Info */}
-      <div className="text-xs text-gray-500">
-        {fileType === "GenBank" ? (
-          <span>Accepted formats: .gb, .gbf, .gbff, .gbk (Max: 50MB)</span>
-        ) : (
-          <span>Accepted format: .csv (Max: 10MB)</span>
-        )}
-      </div>
     </div>
   )
 }

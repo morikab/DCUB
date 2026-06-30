@@ -6,6 +6,7 @@ interface OptimizationState {
   // DNA Sequence
   dnaSequence: string
   sequenceFile: File | null
+  sequenceFilePath: string
 
   // Organisms
   wantedOrganisms: Organism[]
@@ -19,6 +20,7 @@ interface OptimizationState {
   // Actions
   setDnaSequence: (sequence: string) => void
   setSequenceFile: (file: File | null) => void
+  setSequenceFilePath: (path: string) => void
 
   addWantedOrganism: (organism: Organism) => void
   addUnwantedOrganism: (organism: Organism) => void
@@ -38,6 +40,7 @@ interface OptimizationState {
 const initialState = {
   dnaSequence: "",
   sequenceFile: null,
+  sequenceFilePath: "",
   wantedOrganisms: [],
   unwantedOrganisms: [],
   tuningParameter: 50,
@@ -52,6 +55,7 @@ export const useOptimizationStore = create<OptimizationState>()(
 
       setDnaSequence: (sequence) => set({ dnaSequence: sequence }),
       setSequenceFile: (file) => set({ sequenceFile: file }),
+      setSequenceFilePath: (path) => set({ sequenceFilePath: path }),
 
       addWantedOrganism: (organism) =>
         set((state) => ({

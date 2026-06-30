@@ -39,7 +39,11 @@ def run_modules_endpoint(request: RunModulesRequest):
             user_input=request.user_input,
             should_run_output_module=request.should_run_output_module
         )
+        if "error_message" in result:
+            raise HTTPException(status_code=500, detail=result["error_message"])
         return RunModulesResponse(result=result)
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
