@@ -1,5 +1,6 @@
 const { app, BrowserWindow, ipcMain, dialog } = require("electron")
 const path = require("path")
+const os = require("os")
 const { spawn, exec } = require('child_process');
 const http = require('http');
 const fs = require("fs").promises
@@ -22,14 +23,20 @@ function cleanupChildProcesses() {
   childProcesses.clear();
 }
 
+const traceFile = path.join(os.tmpdir(), "electron-trace.txt");
+function trace(msg) {
+  try {
+    fsSync.appendFileSync(traceFile, `[${Date.now()}] ${msg}\n`);
+  } catch (_) {}
+}
+
 process.on("SIGTERM", cleanupChildProcesses);
 process.on("SIGINT", cleanupChildProcesses);
 process.on("exit", cleanupChildProcesses);
-process.on("uncaughtException", cleanupChildProcesses);
-
-function trace(msg) {
-  fsSync.appendFileSync("/tmp/electron-trace.txt", `[${Date.now()}] ${msg}\n`);
-}
+process.on("uncaughtException", (err) => {
+  trace(`uncaughtException: ${err && err.stack ? err.stack : err}`);
+  cleanupChildProcesses();
+});
 
 // Function to kill processes on port 3000
 function killProcessOnPort(port) {
@@ -328,11 +335,11 @@ app.on('ready', async () => {
       app.quit();
     });
 
-    nextProcess.on('exit', (code) => {
-      trace(`next exit: code=${code}`);
-      console.log('Next.js server exited with code:', code)
+    nextProcess.on('exit', (code, signal) => {
+      trace(`next exit: code=${code} signal=${signal}`);
+      console.log('Next.js server exited with code:', code, 'signal:', signal)
       nextProcess = null;
-      if (code !== 0) {
+      if (code !== null && code !== 0) {
         app.quit();
       }
     });
