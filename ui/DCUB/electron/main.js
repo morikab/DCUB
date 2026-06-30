@@ -311,34 +311,25 @@ app.on('ready', async () => {
 
     // Handle process output
     nextProcess.stdout.on('data', (data) => {
-      trace("next stdout first chunk");
       const output = data.toString().trim();
+      trace(`next stdout: ${output}`);
       console.log(`Next.js stdout: ${output}`);
-      
-      // Check for server ready message
-      if (output.includes('Ready') || output.includes('started server') || output.includes('Local:')) {
-        console.log('Server appears to be ready based on output');
-      }
     });
 
     nextProcess.stderr.on('data', (data) => {
       const output = data.toString().trim();
+      trace(`next stderr: ${output}`);
       console.error(`Next.js stderr: ${output}`);
-      
-      // Check for specific errors
-      if (output.includes('EADDRINUSE')) {
-        console.error('Port 3000 is already in use!');
-      } else if (output.includes('ECONNREFUSED')) {
-        console.error('Connection refused - server may not be starting properly');
-      }
     });
 
     nextProcess.on('error', (err) => {
+      trace(`next error: ${err.message}`);
       console.error('Failed to start Next.js server:', err);
       app.quit();
     });
 
     nextProcess.on('exit', (code) => {
+      trace(`next exit: code=${code}`);
       console.log('Next.js server exited with code:', code)
       nextProcess = null;
       if (code !== 0) {
@@ -347,7 +338,7 @@ app.on('ready', async () => {
     });
     trace("waitForServer started");
     // Wait for server to be ready
-    await waitForServer('http://127.0.0.1:3000');
+    await waitForServer('http://127.0.0.1:3000', 60000);
     trace("waitForServer resolved");
     mainWindow.loadURL("http://127.0.0.1:3000");
     trace("loadURL called");
