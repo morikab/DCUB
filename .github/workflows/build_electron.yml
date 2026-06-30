@@ -18,11 +18,11 @@ on:
       publish_release:
         description: "Publish a GitHub Release with the built artifacts"
         required: true
-        default: "false"
+        default: "true"
       release_tag:
         description: "Release tag (e.g. v1.0.1) — required when publish_release is true"
         required: false
-        default: ""
+        default: "v1.0.0"
 
 jobs:
   # ==================================================
