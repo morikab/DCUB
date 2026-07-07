@@ -38,25 +38,15 @@ process.on("uncaughtException", (err) => {
   cleanupChildProcesses();
 });
 
-// Function to kill processes on port 3000
 function killProcessOnPort(port) {
   return new Promise((resolve) => {
-    exec(`lsof -ti:${port}`, (error, stdout) => {
-      if (stdout.trim()) {
-        const pids = stdout.trim().split('\n');
-        console.log(`Killing processes on port ${port}: ${pids.join(', ')}`);
-        
-        pids.forEach(pid => {
-          exec(`kill -9 ${pid}`, (killError) => {
-            if (killError) {
-              console.log(`Could not kill process ${pid}:`, killError.message);
-            } else {
-              console.log(`Killed process ${pid}`);
-            }
-          });
-        });
-        
-        // Wait a bit for processes to be killed
+    const cmd = process.platform === "win32"
+      ? `for /f "tokens=5" %a in ('netstat -aon ^| findstr :${port}') do taskkill /F /PID %a`
+      : `lsof -ti:${port} | xargs -r kill -9`;
+
+    exec(cmd, { shell: process.platform === "win32" ? "cmd.exe" : "/bin/sh" }, (error, stdout) => {
+      if (stdout && stdout.trim()) {
+        console.log(`Killed processes on port ${port}`);
         setTimeout(resolve, 1000);
       } else {
         resolve();
@@ -213,14 +203,8 @@ async function startBackendServer() {
       ? path.join(__dirname, "../backend")
       : process.resourcesPath;
 
-    const backendExecutable = path.join(basePath, "fastapi_server", "fastapi_server");
-    
-    // FIXMW
-    // switch (process.platform) {
-    //   case "darwin": return path.join(basePath, "fastapi_server_macos");
-    //   case "win32":  return path.join(basePath, "fastapi_server_win.exe");
-    //   case "linux":  return path.join(basePath, "fastapi_server_linux");
-    // }
+    const execName = process.platform === "win32" ? "fastapi_server.exe" : "fastapi_server";
+    const backendExecutable = path.join(basePath, "fastapi_server", execName);
     
 
     console.log("Starting FastAPI backend executable...", { backendExecutable });

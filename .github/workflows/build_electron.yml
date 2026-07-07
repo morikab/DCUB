@@ -15,6 +15,14 @@ on:
         description: "Build Windows app"
         required: true
         default: "true"
+      publish_release:
+        description: "Publish a GitHub Release with the built artifacts"
+        required: true
+        default: "true"
+      release_tag:
+        description: "Release tag (e.g. v1.0.1) — required when publish_release is true"
+        required: false
+        default: "v1.0.0"
 
 jobs:
   # ==================================================
@@ -308,3 +316,44 @@ jobs:
         with:
           name: DCUB-Windows-build
           path: ui/DCUB/electron/dist/*.exe
+
+  # ==================================================
+  # Publish GitHub Release
+  # ==================================================
+  publish-release:
+    name: Publish GitHub Release
+    if: ${{ github.event.inputs.publish_release == 'true' }}
+    needs: [build-macos, build-linux, build-windows]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download macOS artifact
+        if: needs.build-macos.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: DCUB-macOS-build
+          path: artifacts
+
+      - name: Download Linux artifact
+        if: needs.build-linux.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: DCUB-Linux-build
+          path: artifacts
+
+      - name: Download Windows artifact
+        if: needs.build-windows.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: DCUB-Windows-build
+          path: artifacts
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.release_tag }}
+          name: DCUB ${{ github.event.inputs.release_tag }}
+          files: artifacts/*
+          fail_on_unmatched_files: false
