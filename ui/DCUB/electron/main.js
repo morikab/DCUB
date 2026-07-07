@@ -23,17 +23,20 @@ function cleanupChildProcesses() {
   childProcesses.clear();
 }
 
-process.on("SIGTERM", cleanupChildProcesses);
-process.on("SIGINT", cleanupChildProcesses);
-process.on("exit", cleanupChildProcesses);
-process.on("uncaughtException", cleanupChildProcesses);
-
 const traceFile = path.join(os.tmpdir(), "electron-trace.txt");
 function trace(msg) {
   try {
     fsSync.appendFileSync(traceFile, `[${Date.now()}] ${msg}\n`);
   } catch (_) {}
 }
+
+process.on("SIGTERM", cleanupChildProcesses);
+process.on("SIGINT", cleanupChildProcesses);
+process.on("exit", cleanupChildProcesses);
+process.on("uncaughtException", (err) => {
+  trace(`uncaughtException: ${err && err.stack ? err.stack : err}`);
+  cleanupChildProcesses();
+});
 
 function killProcessOnPort(port) {
   return new Promise((resolve) => {
@@ -316,11 +319,11 @@ app.on('ready', async () => {
       app.quit();
     });
 
-    nextProcess.on('exit', (code) => {
-      trace(`next exit: code=${code}`);
-      console.log('Next.js server exited with code:', code)
+    nextProcess.on('exit', (code, signal) => {
+      trace(`next exit: code=${code} signal=${signal}`);
+      console.log('Next.js server exited with code:', code, 'signal:', signal)
       nextProcess = null;
-      if (code !== 0) {
+      if (code !== null && code !== 0) {
         app.quit();
       }
     });
