@@ -217,23 +217,56 @@ export function OrganismList({ type }: OrganismListProps) {
         </Badge>
       </div>
 
+      {/* Weight distribution summary */}
+      {organisms.length >= 2 && (() => {
+        const totalPriority = organisms.reduce((sum, org) => sum + org.priority, 0)
+        const segmentColors = ["bg-blue-400", "bg-emerald-400", "bg-violet-400", "bg-orange-400", "bg-pink-400", "bg-teal-400"]
+        return (
+          <div className="space-y-1">
+            <div className="flex h-2 rounded-full overflow-hidden gap-px">
+              {organisms.map((org, i) => {
+                const w = totalPriority > 0 ? org.priority / totalPriority : 0
+                return (
+                  <div
+                    key={org.id}
+                    className={segmentColors[i % segmentColors.length]}
+                    style={{ width: `${w * 100}%` }}
+                    title={`${org.name}: ${w.toFixed(2)}`}
+                  />
+                )
+              })}
+            </div>
+            <p className="text-xs text-gray-500">
+              {organisms.map((org) => {
+                const w = totalPriority > 0 ? org.priority / totalPriority : 0
+                return `${org.name} ${w.toFixed(2)}`
+              }).join(" · ")}
+            </p>
+          </div>
+        )
+      })()}
+
       {/* Existing Organisms */}
       <div className="space-y-3">
-        {organisms.map((organism) => (
-          <OrganismCard
-            key={organism.id}
-            organism={organism}
-            otherOrganismNames={organisms
-              .filter((other) => other.id !== organism.id)
-              .map((other) => other.name.toLowerCase())}
-            otherGenomePaths={[
-              ...organisms.filter((other) => other.id !== organism.id).map((other) => other.genomePath.trim()),
-              ...opposingOrganisms.map((other) => other.genomePath.trim()),
-            ].filter(Boolean)}
-            onUpdate={(updated) => updateOrganism(organism.id, updated)}
-            onRemove={() => removeOrganism(organism.id)}
-          />
-        ))}
+        {(() => {
+          const totalPriority = organisms.reduce((sum, org) => sum + org.priority, 0)
+          return organisms.map((organism) => (
+            <OrganismCard
+              key={organism.id}
+              organism={organism}
+              effectiveWeight={totalPriority > 0 ? organism.priority / totalPriority : 0}
+              otherOrganismNames={organisms
+                .filter((other) => other.id !== organism.id)
+                .map((other) => other.name.toLowerCase())}
+              otherGenomePaths={[
+                ...organisms.filter((other) => other.id !== organism.id).map((other) => other.genomePath.trim()),
+                ...opposingOrganisms.map((other) => other.genomePath.trim()),
+              ].filter(Boolean)}
+              onUpdate={(updated) => updateOrganism(organism.id, updated)}
+              onRemove={() => removeOrganism(organism.id)}
+            />
+          ))
+        })()}
       </div>
 
       <ErrorDialog
@@ -444,13 +477,14 @@ export function OrganismList({ type }: OrganismListProps) {
 
 interface OrganismCardProps {
   organism: Organism
+  effectiveWeight: number
   otherOrganismNames: string[]
   otherGenomePaths: string[]
   onUpdate: (organism: Organism) => void
   onRemove: () => void
 }
 
-function OrganismCard({ organism, otherOrganismNames, otherGenomePaths, onUpdate, onRemove }: OrganismCardProps) {
+function OrganismCard({ organism, effectiveWeight, otherOrganismNames, otherGenomePaths, onUpdate, onRemove }: OrganismCardProps) {
   const [isExpanded, setIsExpanded] = useState(false)
   const [isExpressionDataOpen, setIsExpressionDataOpen] = useState(!!organism.expressionDataPath)
 
@@ -477,6 +511,7 @@ function OrganismCard({ organism, otherOrganismNames, otherGenomePaths, onUpdate
                 {organism.name}
               </Badge>
               <Badge variant="outline">Priority: {organism.priority}</Badge>
+              <Badge variant="outline" className="text-gray-500">Weight: {effectiveWeight.toFixed(2)}</Badge>
               <span className="text-sm text-gray-500 truncate">{getDisplayPath(organism.genomePath)}</span>
               {organism.expressionDataPath && (
                 <Badge variant="outline" className="text-green-700 border-green-300">
@@ -507,6 +542,7 @@ function OrganismCard({ organism, otherOrganismNames, otherGenomePaths, onUpdate
               {organism.name}
             </Badge>
             <Badge variant="outline">Priority: {organism.priority}</Badge>
+            <Badge variant="outline" className="text-gray-500">Weight: {effectiveWeight.toFixed(2)}</Badge>
           </button>
           <Button variant="ghost" size="sm" onClick={onRemove} className="text-red-500 hover:text-red-700">
             <Trash2 className="w-4 h-4" />
@@ -564,6 +600,7 @@ function OrganismCard({ organism, otherOrganismNames, otherGenomePaths, onUpdate
                   })
                 }
               />
+              <p className="text-xs text-gray-500">Effective weight: {effectiveWeight.toFixed(2)}</p>
             </div>
           </div>
 
