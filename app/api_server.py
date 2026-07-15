@@ -9,7 +9,7 @@ import uvicorn
 
 # Ensure modules can be imported
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from modules.main import run_modules
+from modules.main import artifacts_directory, run_modules
 from modules.models import UserInput
 
 app = FastAPI()
@@ -36,7 +36,6 @@ class RunModulesResponse(BaseModel):
 @app.post("/upload-file")
 async def upload_file(file: UploadFile = File(...)):
     """Dev-only: accept a file upload and return its server-side path for use in /run-modules."""
-    from modules.main import artifacts_directory
     upload_dir = artifacts_directory / "uploads"
     upload_dir.mkdir(parents=True, exist_ok=True)
     dest = upload_dir / file.filename
