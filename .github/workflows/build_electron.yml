@@ -329,6 +329,16 @@ jobs:
       contents: write
 
     steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Prepare release notes
+        run: |
+          VERSION="${{ github.event.inputs.release_tag }}"
+          VERSION_NUM="${VERSION#v}"
+          sed "s/vX\.Y\.Z/${VERSION}/g; s/X\.Y\.Z/${VERSION_NUM}/g" \
+            docs/assets/release-notes-template.md > /tmp/release-notes.md
+
       - name: Download macOS artifact
         if: needs.build-macos.result == 'success'
         uses: actions/download-artifact@v4
@@ -355,5 +365,6 @@ jobs:
         with:
           tag_name: ${{ github.event.inputs.release_tag }}
           name: DCUB ${{ github.event.inputs.release_tag }}
+          body_path: /tmp/release-notes.md
           files: artifacts/*
           fail_on_unmatched_files: false
