@@ -182,6 +182,11 @@ export default function DNAOptimizerPage() {
         },
         processing_time: optimization_result.processing_time || 0,
         timestamp: optimization_result.timestamp || new Date().toISOString(),
+        organisms_dist_scores: (optimization_result.final_evaluation?.organisms ?? []).map((o: any) => ({
+          name: o.name,
+          is_wanted: o.is_wanted,
+          dist_score: o.dist_score,
+        })),
       }
     } catch (error) {
       console.error("Error parsing response:", error)
