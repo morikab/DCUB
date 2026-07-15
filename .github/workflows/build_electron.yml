@@ -116,14 +116,23 @@ jobs:
         run: npm run build-electron
 
       # --------------------------------------------------
-      # 11. Upload Electron build artifacts
+      # 11. Bundle artifact with README and zip
+      # --------------------------------------------------
+      - name: Bundle macOS artifact with README
+        run: |
+          mkdir -p bundle
+          cp ui/DCUB/electron/dist/*.dmg bundle/
+          cp docs/assets/macOS_build/README.md bundle/
+          cd bundle && zip -r ../DCUB-macOS-${{ github.event.inputs.release_tag }}.zip .
+
+      # --------------------------------------------------
+      # 12. Upload Electron build artifacts
       # --------------------------------------------------
       - name: Upload Electron artifacts
         uses: actions/upload-artifact@v4
         with:
           name: DCUB-macOS-build
-          path: |
-            ui/DCUB/electron/dist/*.dmg
+          path: DCUB-macOS-${{ github.event.inputs.release_tag }}.zip
 
   # ==================================================
   # Linux build
@@ -216,15 +225,24 @@ jobs:
         run: npm run build-electron -- --linux
 
       # --------------------------------------------------
-      # 11. Upload Electron build artifacts
+      # 11. Bundle artifact with README and zip
+      # --------------------------------------------------
+      - name: Bundle Linux artifact with README
+        run: |
+          mkdir -p bundle
+          cp ui/DCUB/electron/dist/*.AppImage bundle/ 2>/dev/null || true
+          cp ui/DCUB/electron/dist/*.deb bundle/ 2>/dev/null || true
+          cp docs/assets/linux_build/README.md bundle/
+          cd bundle && zip -r ../DCUB-Linux-${{ github.event.inputs.release_tag }}.zip .
+
+      # --------------------------------------------------
+      # 12. Upload Electron build artifacts
       # --------------------------------------------------
       - name: Upload Electron artifacts
         uses: actions/upload-artifact@v4
         with:
           name: DCUB-Linux-build
-          path: |
-            ui/DCUB/electron/dist/*.AppImage
-            ui/DCUB/electron/dist/*.deb
+          path: DCUB-Linux-${{ github.event.inputs.release_tag }}.zip
 
   # ==================================================
   # Windows build
@@ -309,13 +327,24 @@ jobs:
         run: npm run build-electron -- --win
 
       # --------------------------------------------------
-      # 11. Upload Electron build artifacts
+      # 11. Bundle artifact with README and zip
+      # --------------------------------------------------
+      - name: Bundle Windows artifact with README
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path bundle
+          Copy-Item ui/DCUB/electron/dist/*.exe bundle/
+          Copy-Item docs/assets/windows_build/README.md bundle/
+          Compress-Archive -Path bundle/* -DestinationPath "DCUB-Windows-${{ github.event.inputs.release_tag }}.zip"
+
+      # --------------------------------------------------
+      # 12. Upload Windows installer
       # --------------------------------------------------
       - name: Upload Windows installer
         uses: actions/upload-artifact@v4
         with:
           name: DCUB-Windows-build
-          path: ui/DCUB/electron/dist/*.exe
+          path: DCUB-Windows-${{ github.event.inputs.release_tag }}.zip
 
   # ==================================================
   # Publish GitHub Release
@@ -329,16 +358,6 @@ jobs:
       contents: write
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Prepare release notes
-        run: |
-          VERSION="${{ github.event.inputs.release_tag }}"
-          VERSION_NUM="${VERSION#v}"
-          sed "s/vX\.Y\.Z/${VERSION}/g; s/X\.Y\.Z/${VERSION_NUM}/g" \
-            docs/assets/release-notes-template.md > /tmp/release-notes.md
-
       - name: Download macOS artifact
         if: needs.build-macos.result == 'success'
         uses: actions/download-artifact@v4
@@ -365,6 +384,5 @@ jobs:
         with:
           tag_name: ${{ github.event.inputs.release_tag }}
           name: DCUB ${{ github.event.inputs.release_tag }}
-          body_path: /tmp/release-notes.md
           files: artifacts/*
           fail_on_unmatched_files: false
