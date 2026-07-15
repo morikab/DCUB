@@ -165,6 +165,53 @@
                 </div>
 
             </div>
+
+            <!-- Installation Notes -->
+            <div class="mt-14 border border-slate-200 rounded-2xl overflow-hidden">
+                <button
+                    onclick="this.nextElementSibling.classList.toggle('hidden'); this.querySelector('svg').classList.toggle('rotate-180')"
+                    class="w-full flex items-center justify-between px-8 py-5 bg-slate-50 hover:bg-slate-100 transition-colors text-left"
+                >
+                    <span class="font-semibold text-slate-700">Installation Notes &amp; Troubleshooting</span>
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5 text-slate-400 transition-transform duration-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                        <path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </button>
+                <div class="hidden divide-y divide-slate-100">
+
+                    <!-- macOS -->
+                    <div class="px-8 py-6 flex gap-5">
+                        <img src="assets/icon-macos.svg" alt="macOS" class="w-6 h-6 mt-0.5 flex-shrink-0 opacity-60">
+                        <div>
+                            <p class="font-semibold text-slate-800 mb-1">macOS — "App is damaged and can't be opened"</p>
+                            <p class="text-sm text-slate-500 mb-3">macOS quarantine flags unsigned apps downloaded from the internet. Run this once in Terminal after moving the app to <code class="bg-slate-100 px-1 rounded text-xs">/Applications</code>:</p>
+                            <pre class="bg-slate-900 text-green-400 text-sm rounded-lg px-5 py-3 font-mono overflow-x-auto">xattr -d com.apple.quarantine /Applications/DCUB.app</pre>
+                            <p class="text-xs text-slate-400 mt-2">Then try opening the app again normally.</p>
+                        </div>
+                    </div>
+
+                    <!-- Windows -->
+                    <div class="px-8 py-6 flex gap-5">
+                        <img src="assets/icon-windows.svg" alt="Windows" class="w-6 h-6 mt-0.5 flex-shrink-0 opacity-60">
+                        <div>
+                            <p class="font-semibold text-slate-800 mb-1">Windows — SmartScreen warning</p>
+                            <p class="text-sm text-slate-500">If Windows Defender SmartScreen blocks the installer, click <strong>More info</strong> → <strong>Run anyway</strong>. The app is not signed with a commercial certificate but is safe to install.</p>
+                        </div>
+                    </div>
+
+                    <!-- Linux -->
+                    <div class="px-8 py-6 flex gap-5">
+                        <img src="assets/icon-linux.svg" alt="Linux" class="w-6 h-6 mt-0.5 flex-shrink-0 opacity-60">
+                        <div>
+                            <p class="font-semibold text-slate-800 mb-1">Linux — AppImage won't launch</p>
+                            <p class="text-sm text-slate-500 mb-3">Make the AppImage executable before running it:</p>
+                            <pre class="bg-slate-900 text-green-400 text-sm rounded-lg px-5 py-3 font-mono overflow-x-auto">chmod +x DCUB-*.AppImage &amp;&amp; ./DCUB-*.AppImage</pre>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+
         </div>
     </section>
 
