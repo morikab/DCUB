@@ -1,5 +1,5 @@
 import typing
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from modules import models
 
@@ -11,6 +11,7 @@ class EvaluationModuleResult:
     average_distance_score: float
     weakest_link_score: float
     ratio_score: float
+    organisms_dist_scores: typing.List[typing.Dict[str, typing.Any]] = field(default_factory=list)
 
     @property
     def summary(self) -> typing.Dict[str, typing.Any]:
@@ -19,6 +20,7 @@ class EvaluationModuleResult:
             "average_distance_score": self.average_distance_score,
             "weakest_link_score": self.weakest_link_score,
             "ratio_score": self.ratio_score,
+            "organisms_dist_scores": self.organisms_dist_scores,
         }
 
     def get_score(self, score_type: models.EvaluationScore) -> float:

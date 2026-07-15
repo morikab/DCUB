@@ -36,4 +36,9 @@ export interface OptimizationResult {
   }
   processing_time: number
   timestamp: string
+  organisms_dist_scores: Array<{
+    name: string
+    is_wanted: boolean
+    dist_score: number
+  }>
 }

@@ -1,14 +1,15 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from typing import Any, Dict
+import shutil
 import sys
 import os
 import uvicorn
 
 # Ensure modules can be imported
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-from modules.main import run_modules
+from modules.main import artifacts_directory, run_modules
 from modules.models import UserInput
 
 app = FastAPI()
@@ -30,6 +31,17 @@ class RunModulesRequest(BaseModel):
 
 class RunModulesResponse(BaseModel):
     result: Dict[str, Any]
+
+
+@app.post("/upload-file")
+async def upload_file(file: UploadFile = File(...)):
+    """Dev-only: accept a file upload and return its server-side path for use in /run-modules."""
+    upload_dir = artifacts_directory / "uploads"
+    upload_dir.mkdir(parents=True, exist_ok=True)
+    dest = upload_dir / file.filename
+    with dest.open("wb") as f:
+        shutil.copyfileobj(file.file, f)
+    return {"file_path": str(dest)}
 
 
 @app.post("/run-modules", response_model=RunModulesResponse)

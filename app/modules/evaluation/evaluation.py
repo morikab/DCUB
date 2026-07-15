@@ -103,6 +103,14 @@ class EvaluationModule(object):
             average_distance_score=average_distance_score,
             weakest_link_score=weakest_link_score,
             ratio_score=ratio_score,
+            organisms_dist_scores=[
+                {
+                    "name": o["name"],
+                    "is_wanted": o["is_wanted"],
+                    "dist_score": o["dist_score"],
+                }
+                for o in organisms_evaluation_summary
+            ],
         )
 
         evaluation_summary = {
