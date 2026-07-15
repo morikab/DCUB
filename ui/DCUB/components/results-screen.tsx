@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ArrowLeft, Download, Copy, CheckCircle, BarChart3, Dna, Clock, RefreshCw } from "lucide-react"
+import { OrganismDistChart } from "@/components/organism-dist-chart"
 import type { OptimizationResult } from "@/lib/types"
 
 interface ResultsScreenProps {
@@ -260,6 +261,9 @@ ${result.optimized_sequence}`
             </CardContent>
           </Card>
         </div>
+
+        {/* Per-Organism CUB Difference */}
+        <OrganismDistChart organismsDistScores={result.organisms_dist_scores} />
 
         {/* Optimization Parameters */}
         <Card>
