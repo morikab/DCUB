@@ -795,9 +795,20 @@ function FileInput({
       // Complete upload
       setUploadProgress(100)
       setUploadedFile(file)
-      // Electron exposes file.path on File objects; browsers don't (security restriction).
-      // webkitRelativePath is only set for directory pickers. Fall back to the filename alone.
-      const fullPath = (file as any).path || file.webkitRelativePath || file.name
+
+      // Electron exposes file.path; browsers don't. In dev (browser) mode, upload the
+      // file to the backend so it gets a real server-side path for /run-modules.
+      let fullPath: string
+      if ((file as any).path) {
+        fullPath = (file as any).path
+      } else {
+        const formData = new FormData()
+        formData.append("file", file)
+        const uploadRes = await fetch("http://localhost:8000/upload-file", { method: "POST", body: formData })
+        if (!uploadRes.ok) throw new Error("File upload to dev server failed")
+        const { file_path } = await uploadRes.json()
+        fullPath = file_path
+      }
       onChange(fullPath)
 
       if (fileType === "GenBank" && id === "genome-path") {
