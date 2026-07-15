@@ -14,10 +14,14 @@ const childProcesses = new Set();
 
 function cleanupChildProcesses() {
   console.log('Cleaning up child processes...');
-  for (const process of childProcesses) {
-    if (!process.killed) {
-      console.log(`Killing child process with PID: ${process.pid}`);
-      process.kill('SIGKILL');
+  for (const proc of childProcesses) {
+    if (!proc.killed) {
+      console.log(`Killing child process with PID: ${proc.pid}`);
+      if (process.platform === 'win32') {
+        exec(`taskkill /F /T /PID ${proc.pid}`, () => {});
+      } else {
+        proc.kill('SIGKILL');
+      }
     }
   }
   childProcesses.clear();
