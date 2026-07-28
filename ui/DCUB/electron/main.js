@@ -70,7 +70,6 @@ function waitForServer(url, timeout = 15000) {
 
     const cleanup = () => {
       if (currentRequest) {
-        currentRequest.removeAllListeners();
         currentRequest.destroy();
         currentRequest = null;
       }
@@ -92,6 +91,7 @@ function waitForServer(url, timeout = 15000) {
         currentRequest = http.get(url, (res) => {
           if (isResolved) return;
           isResolved = true;
+          res.resume(); // drain the body before destroy() to avoid a mid-response socket teardown
           cleanup();
           resolve();
         });
