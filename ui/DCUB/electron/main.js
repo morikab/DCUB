@@ -70,7 +70,11 @@ function waitForServer(url, timeout = 15000) {
 
     const cleanup = () => {
       if (currentRequest) {
-        currentRequest.removeAllListeners();
+        // Don't strip listeners before destroy(): destroying a request whose
+        // response body hasn't been drained can emit a late 'error' (socket
+        // hang up). The existing 'error' handler below already guards on
+        // isResolved, so leaving it attached just makes that a safe no-op
+        // instead of an uncaught exception that kills the whole process.
         currentRequest.destroy();
         currentRequest = null;
       }
@@ -92,6 +96,7 @@ function waitForServer(url, timeout = 15000) {
         currentRequest = http.get(url, (res) => {
           if (isResolved) return;
           isResolved = true;
+          res.resume(); // drain the body before destroy() to avoid a mid-response socket teardown
           cleanup();
           resolve();
         });
