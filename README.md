@@ -9,17 +9,24 @@ Please follow the steps below to install and run the tool.
 
 ## Prerequisites
 
-A local Node.js / Python environment if building from source.  
+A local Node.js / Python environment if building from source. Check the exact version constraints before you start:
+
+- **Python** — pinned in [`pyproject.toml`](./pyproject.toml) (`python = "~3.9"`); install via [Poetry](https://python-poetry.org/).
+- **Node.js / npm** — see [`ui/DCUB/package.json`](./ui/DCUB/package.json) and [`ui/DCUB/electron/package.json`](./ui/DCUB/electron/package.json) for dependency requirements; a recent Node LTS is recommended.
 
 ---
 
 ## Installation Guide (Pre‑built binaries)
 
-Pre‑compiled versions of DCUB for the major operating systems are available from the project website:
+Pre‑compiled versions of DCUB for macOS, Windows, and Linux are published as `.zip` archives on the [GitHub Releases page](https://github.com/morikab/DCUB/releases/latest):
+
+- https://github.com/morikab/DCUB/releases/latest
+
+They're also available from the project website, which includes per‑OS installation notes and troubleshooting tips:
 
 - https://www.tau.ac.il/~bentulila
 
-Download the installer or archive that matches your operating system and follow the platform‑specific instructions provided on the website.
+Download the `.zip` archive that matches your operating system, extract it, and run the app. See the installation notes linked above for OS‑specific steps (e.g. clearing the macOS quarantine flag, bypassing Windows SmartScreen, or making the Linux AppImage executable).
 
 After installation, follow the usage instructions from the user guide packaged with the distribution.
 
@@ -85,4 +92,4 @@ If you prefer to build the tool from source (for development or customization), 
   https://github.com/morikab/DCUB
 
 - **Enable Chrome plugin (accessibility):**  
-  Free Chrome plugin – https://www.enable.co.il/tos/
+  Free Chrome plugin – https://enable.co.il/
