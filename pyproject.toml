@@ -46,6 +46,11 @@ fastapi = "^0.103.2"
 uvicorn = "^0.39.0"
 python-multipart = "^0.0.20"
 
+# Hypermutable-site detection and repair (unpublished sibling repo).
+# Path is relative to this file; `develop = true` keeps it editable so ESO
+# changes are picked up without a reinstall.
+eso = { path = "../evolutionary-stability-optimizer", develop = true }
+
 [tool.poetry.group.analysis]
 optional = true
 

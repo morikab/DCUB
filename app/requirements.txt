@@ -36,3 +36,7 @@ openpyxl~=3.1.2
 # For API server
 fastapi
 uvicorn
+
+# ESO is a local path dependency - install it with:
+#   pip install -e ../evolutionary-stability-optimizer
+# (Poetry is the source of truth; see repo-root pyproject.toml.)
