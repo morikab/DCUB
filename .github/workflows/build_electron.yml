@@ -59,7 +59,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
+          python-version: "3.11"
 
       # --------------------------------------------------
       # 4. Install Poetry + Python dependencies
@@ -168,7 +168,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
+          python-version: "3.11"
 
       # --------------------------------------------------
       # 4. Install Electron System dependencies
@@ -278,7 +278,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
-          python-version: "3.9"
+          python-version: "3.11"
 
       # --------------------------------------------------
       # 4. Install Poetry + Python dependencies
@@ -294,9 +294,9 @@ jobs:
       # 6. Build standalone FastAPI server
       # --------------------------------------------------
       - name: Build FastAPI backend
-        shell: cmd 
+        shell: cmd
         run: |
-          .\build_fastapi.bat  
+          .\build_fastapi.bat
 
       # --------------------------------------------------
       # 7. Install UI dependencies
