@@ -17,13 +17,19 @@ CLUSTERING_MAT = np.array([
 
 def test_make_distance_matrix_is_unchanged():
     distance_matrix = make_distance_matrix(CLUSTERING_MAT)
+    # Expected near-zero cells (1.11022302e-16) are float64 rounding noise from
+    # spearmanr's internal Pearson-on-ranks computation; the true mathematical
+    # value is 0.0 (perfectly correlated rows), but summation order in floating-
+    # point arithmetic produces this tiny epsilon. Use atol=1e-9 to tolerate
+    # rounding-noise drift across numpy/scipy versions while still catching real
+    # behavior changes (actual dissimilarity is 2.0, far larger than the tolerance).
     expected = np.array([
         [1.11022302e-16, 1.11022302e-16, 2.0, 2.0],
         [1.11022302e-16, 1.11022302e-16, 2.0, 2.0],
         [2.0, 2.0, 1.11022302e-16, 1.11022302e-16],
         [2.0, 2.0, 1.11022302e-16, 1.11022302e-16],
     ])
-    np.testing.assert_allclose(distance_matrix, expected)
+    np.testing.assert_allclose(distance_matrix, expected, atol=1e-9)
 
 
 def test_create_n_clusters_groups_similar_organisms_together():
