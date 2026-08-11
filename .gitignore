@@ -89,3 +89,4 @@ ui/DCUB/backend/
 # Superpowers / AI tooling
 ###############################################################################
 docs/superpowers/
+.worktrees/

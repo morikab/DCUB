@@ -7,6 +7,7 @@ from Bio import SeqFeature
 from Bio import SeqIO
 from Bio.Seq import Seq
 import codonbias as cb
+from modules.user_IO import _codonbias_compat  # noqa: F401 - applies the pandas>=3.0 compat monkeypatch on import
 import pandas as pd
 
 from logger_factory.logger_factory import LoggerFactory

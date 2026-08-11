@@ -11,7 +11,7 @@ Please follow the steps below to install and run the tool.
 
 A local Node.js / Python environment if building from source. Check the exact version constraints before you start:
 
-- **Python** — pinned in [`pyproject.toml`](./pyproject.toml) (`python = "~3.9"`); install via [Poetry](https://python-poetry.org/).
+- **Python** — Python version is pinned in [`pyproject.toml`](./pyproject.toml) (`python = "~3.11"`).  
 - **Node.js / npm** — see [`ui/DCUB/package.json`](./ui/DCUB/package.json) and [`ui/DCUB/electron/package.json`](./ui/DCUB/electron/package.json) for dependency requirements; a recent Node LTS is recommended.
 
 ---
@@ -46,6 +46,11 @@ If you prefer to build the tool from source (for development or customization), 
    - For notebooks / analysis tooling:
      ```
      poetry install --with build,analysis
+     ```
+   - To run the test suite:
+     ```
+     poetry install --with dev
+     poetry run pytest app/tests -v
      ```
 
 1. **Build the standalone FastAPI server**
