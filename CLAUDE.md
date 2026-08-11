@@ -168,4 +168,4 @@ All analysis-generated figures are written to `analysis/results/<dataset>/figure
 
 - `build_fastapi.sh` calls PyInstaller and bundles the `codonbias` genetic code CSV as a data file; the path is resolved dynamically from the installed package.
 - `ui/DCUB/scripts/copy-standalone-next.js` copies the Next.js `.next/standalone` output into the Electron app folder before packaging.
-- Python requirement: `^3.11` (pinned in `pyproject.toml`).
+- Python requirement: `~3.11` (pinned in `pyproject.toml`).
