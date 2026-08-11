@@ -35,7 +35,7 @@ def create_n_clusters(clustering_mat, n_clus):
     dist_metric = 'precomputed'
     distance_mat = make_distance_matrix(clustering_mat)
     clustering = AgglomerativeClustering(n_clusters=n_clus,
-                                         affinity=dist_metric,
+                                         metric=dist_metric,
                                          linkage='average').fit(distance_mat, )
 
     return clustering.labels_
@@ -54,7 +54,7 @@ def create_n_clusters(clustering_mat, n_clus):
 #         #     clustering = KMeans(n_clusters=n_clus).fit(clustering_mat)
 #         # else:
 #         clustering = AgglomerativeClustering(n_clusters=n_clus,
-#                                              affinity= dist_metric,
+#                                              metric= dist_metric,
 #                                              linkage='average').fit(distance_mat, )
 #
 #         labels = clustering.labels_
