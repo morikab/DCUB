@@ -12,9 +12,16 @@ DCUB method family produced the table.
 
 import typing
 
+import numpy as np
+from scipy.spatial.distance import pdist
+
 from logger_factory.logger_factory import LoggerFactory
 from modules import models
 from modules.ORF.single_codon_optimization_method import _calculate_codons_loss
+from modules.ORF.zscore_optimization_method import _calculate_zscore_for_sequence
+from modules.ORF.zscore_optimization_method import get_total_score
+from modules.shared_functions_and_vars import change_all_codons_of_aa
+from modules.shared_functions_and_vars import nt_to_aa
 from modules.shared_functions_and_vars import synonymous_codons
 
 logger = LoggerFactory.get_logger()
@@ -119,4 +126,59 @@ def _table_from_wanted_organism_profile(
         for codon in codons:
             codon_scores.setdefault(codon, 0.0)
         table[amino_acid] = codon_scores
+    return table
+
+
+def _table_from_zscore(
+    module_input: models.ModuleInput,
+    optimization_cub_index: models.ORFOptimizationCubIndex,
+    sequence: str,
+    skipped_codons_num: int,
+) -> typing.Dict[str, typing.Dict[str, float]]:
+    """Score every synonymous codon by the same computation
+    optimize_sequence_by_zscore_bulk_aa runs each iteration - substitute the
+    codon everywhere, z-score the resulting sequence, reduce to a total score -
+    but run once, after the fact, against the FINAL candidate sequence.
+
+    get_total_score is already higher-is-better, so no negation is needed.
+    """
+    optimization_method = module_input.orf_optimization_method
+
+    codons_to_zscore = {}
+    for codon in nt_to_aa:
+        candidate_sequence = change_all_codons_of_aa(
+            seq=sequence,
+            selected_codon=codon,
+            skipped_codons_num=skipped_codons_num,
+        )
+        codons_to_zscore[codon] = _calculate_zscore_for_sequence(
+            sequence=candidate_sequence,
+            module_input=module_input,
+            optimization_cub_index=optimization_cub_index,
+            skipped_codons_num=skipped_codons_num,
+        )
+
+    if optimization_method.is_zscore_ratio_score_optimization:
+        # _calculate_zscore_ratio_score takes a geometric mean, which is
+        # undefined for the negative z-scores that standardization routinely
+        # produces. Shift every candidate into a strictly positive range first,
+        # exactly as optimize_sequence_by_zscore_bulk_aa does - without this the
+        # whole table comes back nan.
+        all_zscores = np.array(
+            [point for zscore in codons_to_zscore.values() for point in zscore.all_scores]
+        ).reshape(-1, 1)
+        max_zscore_distance = pdist(all_zscores).max()
+        min_zscore = all_zscores.min() - max_zscore_distance
+        max_zscore = all_zscores.max() + max_zscore_distance
+        for zscore in codons_to_zscore.values():
+            zscore.normalize(min_zscore=min_zscore, max_zscore=max_zscore)
+
+    table: typing.Dict[str, typing.Dict[str, float]] = {}
+    for codon, zscore in codons_to_zscore.items():
+        score = get_total_score(
+            zscore=zscore,
+            optimization_method=optimization_method,
+            tuning_parameter=module_input.tuning_parameter,
+        )
+        table.setdefault(nt_to_aa[codon], {})[codon] = float(score)
     return table

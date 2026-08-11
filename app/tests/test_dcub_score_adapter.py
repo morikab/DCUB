@@ -198,3 +198,107 @@ class TestSingleOrganismFamily:
 
         for amino_acid, expected_codon in expected.items():
             assert max(table[amino_acid], key=table[amino_acid].get) == expected_codon
+
+
+import math
+
+
+def _zscore_organisms():
+    """Organisms with the extra statistics the zscore path needs (cai_scores /
+    tai_scores drive the cai_avg/cai_std properties used to standardize)."""
+    from modules.shared_functions_and_vars import nt_to_aa
+
+    wanted_weights = {codon: 0.2 for codon in nt_to_aa}
+    wanted_weights["TGT"] = 0.9
+    wanted_weights["TGC"] = 0.1
+    unwanted_weights = {codon: 0.2 for codon in nt_to_aa}
+    unwanted_weights["TGT"] = 0.1
+    unwanted_weights["TGC"] = 0.9
+
+    reference_scores = {f"gene_{index}": 0.1 * index for index in range(1, 11)}
+    organisms = []
+    for name, is_optimized, weights in (
+        ("wanted", True, wanted_weights),
+        ("unwanted", False, unwanted_weights),
+    ):
+        organism = models.Organism(
+            name=name,
+            is_optimized=is_optimized,
+            optimization_priority=50,
+            cai_profile=dict(weights),
+            tai_profile=dict(weights),
+            codon_frequencies={codon: 0.5 for codon in weights},
+            cai_scores=dict(reference_scores),
+            tai_scores=dict(reference_scores),
+        )
+        organisms.append(organism)
+    return organisms
+
+
+class TestZscoreFamily:
+    @pytest.mark.parametrize(
+        "method",
+        [
+            models.ORFOptimizationMethod.zscore_bulk_aa_diff,
+            models.ORFOptimizationMethod.zscore_bulk_aa_ratio,
+            models.ORFOptimizationMethod.zscore_bulk_aa_weakest_link,
+            models.ORFOptimizationMethod.zscore_single_aa_diff,
+        ],
+    )
+    def test_table_is_complete_and_finite(self, method):
+        """Ratio methods geometric-mean the z-scores, which is undefined for
+        negative values - without the same normalization the bulk_aa optimizer
+        performs, this silently produces nan."""
+        from modules.shared_functions_and_vars import synonymous_codons
+
+        organisms = _zscore_organisms()
+        module_input = _module_input(organisms, method, sequence="ATGTGTTGCAAA" * 5)
+
+        table = build_dcub_codon_table(
+            module_input=module_input,
+            optimization_cub_index=models.ORFOptimizationCubIndex.codon_adaptation_index,
+            sequence=module_input.sequence,
+            skipped_codons_num=0,
+        )
+
+        for amino_acid, codons in synonymous_codons.items():
+            assert set(table[amino_acid]) == set(codons)
+            for codon, score in table[amino_acid].items():
+                assert isinstance(score, float)
+                assert math.isfinite(score), f"{amino_acid}/{codon} scored {score}"
+
+    def test_argmax_matches_the_codon_the_zscore_optimizer_would_pick(self):
+        """The table must agree with DCUB's own per-codon ranking, computed the
+        same way optimize_sequence_by_zscore_bulk_aa computes it each iteration."""
+        from modules.ORF.zscore_optimization_method import _calculate_zscore_for_sequence
+        from modules.ORF.zscore_optimization_method import get_total_score
+        from modules.shared_functions_and_vars import change_all_codons_of_aa
+
+        method = models.ORFOptimizationMethod.zscore_bulk_aa_diff
+        cub_index = models.ORFOptimizationCubIndex.codon_adaptation_index
+        organisms = _zscore_organisms()
+        sequence = "ATGTGTTGCAAA" * 5
+        module_input = _module_input(organisms, method, sequence=sequence)
+
+        table = build_dcub_codon_table(
+            module_input=module_input,
+            optimization_cub_index=cub_index,
+            sequence=sequence,
+            skipped_codons_num=0,
+        )
+
+        expected_scores = {}
+        for codon in ("TGT", "TGC"):
+            candidate = change_all_codons_of_aa(seq=sequence, selected_codon=codon, skipped_codons_num=0)
+            zscore = _calculate_zscore_for_sequence(
+                sequence=candidate,
+                module_input=module_input,
+                optimization_cub_index=cub_index,
+                skipped_codons_num=0,
+            )
+            expected_scores[codon] = get_total_score(
+                zscore=zscore, optimization_method=method, tuning_parameter=0.5
+            )
+
+        expected_best = max(expected_scores, key=expected_scores.get)
+        assert max(table["C"], key=table["C"].get) == expected_best
