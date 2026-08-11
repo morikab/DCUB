@@ -109,10 +109,42 @@ class TestSingleCodonFamily:
             skipped_codons_num=0,
         )
 
+        # _calculate_codons_loss returns each amino acid's codon dict sorted
+        # ascending by loss, and _table_from_codon_loss's comprehension
+        # preserves that key order while only negating the values. That
+        # means min(codon_losses, ...) and max(score_table[aa], ...) would
+        # both just return the dict's *first key* regardless of the actual
+        # values - this test would pass even against an all-zeros score
+        # table. Assert the values themselves first, so a degenerate table
+        # cannot slip through silently:
+        for amino_acid, codon_losses in loss_table.items():
+            for codon, loss in codon_losses.items():
+                assert score_table[amino_acid][codon] == pytest.approx(-loss)
+
+        # Then restate the same claim in "argmax" vocabulary, the way the
+        # docstring promises it. NOTE: this fixture ties the loss for most
+        # amino acids - every codon but Cysteine's TGT/TGC is weighted
+        # identically at 0.2 for both organisms - so min(codon_losses, ...)
+        # is itself picking an arbitrary one of several equal-loss codons.
+        # Re-sorting the score dict into alphabetical key order and taking a
+        # second, independent max() (rather than checking whether the
+        # loss table's own choice attains the maximum score) makes that
+        # arbitrary tie-pick disagree purely on key-order grounds - verified
+        # empirically: 18 of this fixture's 21 amino acids have a genuinely
+        # tied minimum loss, and re-ordering flips the "winner" for all 18.
+        # Checking that best_by_loss *attains* the max score - rather than
+        # requiring it be THE unique argmax after an arbitrary reorder - is
+        # the tie-safe version of the same check. It is also implied by the
+        # per-value equality loop above (once every score is exactly -loss,
+        # the argmin-of-loss trivially attains the max-of-score); it's kept
+        # here for readability, matching the docstring's own vocabulary, not
+        # as independent protection - the value-by-value loop above is what
+        # defeats a degenerate/all-zeros table.
         for amino_acid, codon_losses in loss_table.items():
             best_by_loss = min(codon_losses, key=codon_losses.get)
-            best_by_score = max(score_table[amino_acid], key=score_table[amino_acid].get)
-            assert best_by_score == best_by_loss, f"disagreement for {amino_acid}"
+            assert score_table[amino_acid][best_by_loss] == pytest.approx(
+                max(score_table[amino_acid].values())
+            ), f"disagreement for {amino_acid}"
 
     def test_every_codon_of_every_amino_acid_is_present(self, two_organisms):
         from modules.shared_functions_and_vars import synonymous_codons
@@ -131,16 +163,34 @@ class TestSingleOrganismFamily:
     def test_argmax_matches_the_wanted_organisms_profile(self, two_organisms):
         from modules.ORF.single_organism_optimization_method import _get_optimal_codons
 
+        # two_organisms gives every codon a uniform 0.2 weight except
+        # TGT/TGC, so 20 of 21 amino acids here would only verify
+        # tie-break-order-matching, not preference correctness. Rather than
+        # modifying the shared fixture (Task 4's tests and Task 6 depend on
+        # it as-is), build a local copy of the wanted organism's profile
+        # with distinguishable per-codon weights across several amino
+        # acids, so a real value difference - not ordering - decides the
+        # answer for more than just Cysteine.
+        wanted_organism, unwanted_organism = two_organisms
+        modified_profile = dict(wanted_organism.cai_profile)
+        modified_profile["GAT"] = 0.95
+        modified_profile["GAC"] = 0.05
+        modified_profile["AAG"] = 0.9
+        modified_profile["AAA"] = 0.1
+        modified_profile["TTT"] = 0.85
+        modified_profile["TTC"] = 0.15
+        organisms = [_organism("wanted", True, modified_profile), unwanted_organism]
+
         method = models.ORFOptimizationMethod.single_wanted_organism
         cub_index = models.ORFOptimizationCubIndex.codon_adaptation_index
 
         expected = _get_optimal_codons(
-            organisms=two_organisms,
+            organisms=organisms,
             optimization_method=method,
             optimization_cub_index=cub_index,
         )
         table = build_dcub_codon_table(
-            module_input=_module_input(two_organisms, method),
+            module_input=_module_input(organisms, method),
             optimization_cub_index=cub_index,
             sequence="ATG" * 20,
             skipped_codons_num=0,
