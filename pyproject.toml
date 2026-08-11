@@ -7,7 +7,7 @@ readme = "README.md"
 package-mode = false
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = "~3.11"
 
 # Core deps (mirrors app/requirements.txt)
 bio = "1.5.6"
@@ -20,7 +20,7 @@ gprofiler-official = "1.0.0"
 idna = "3.4"
 joblib = "1.5.3"
 mygene = "3.2.2"
-numpy = "2.3.3"
+numpy = "1.26.4"
 packaging = "23.0"
 pandas = "^3.0.3"
 platformdirs = "3.1.1"
@@ -30,7 +30,7 @@ pytz = "2022.7.1"
 pyyaml = "6.0"
 requests = ">=2.31"
 scikit-learn = "^1.9.0.0"
-scipy = "1.15.0"
+scipy = "1.13.1"
 six = "1.16.0"
 threadpoolctl = "3.6.0"
 tqdm = "4.65.0"
