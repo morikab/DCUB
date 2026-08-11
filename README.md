@@ -9,7 +9,7 @@ Please follow the steps below to install and run the tool.
 
 ## Prerequisites
 
-A local Node.js / Python environment if building from source.  
+A local Node.js / Python environment if building from source. Python version is pinned in [`pyproject.toml`](./pyproject.toml) (`python = "~3.11"`).  
 
 ---
 
@@ -39,6 +39,11 @@ If you prefer to build the tool from source (for development or customization), 
    - For notebooks / analysis tooling:
      ```
      poetry install --with build,analysis
+     ```
+   - To run the test suite:
+     ```
+     poetry install --with dev
+     poetry run pytest app/tests -v
      ```
 
 1. **Build the standalone FastAPI server**
