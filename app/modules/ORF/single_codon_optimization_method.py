@@ -273,9 +273,13 @@ def _calculate_codons_loss(organisms: typing.Sequence[models.Organism],
                            tuning_param: float,
                            optimization_method: ORFOptimizationMethod,
                            optimization_cub_index: models.ORFOptimizationCubIndex,
-                           run_summary: RunSummary) -> typing.Dict[str, typing.Dict[str, float]]:
+                           run_summary: typing.Optional[RunSummary] = None) -> typing.Dict[str, typing.Dict[str, float]]:
     """
     :return: Dictionary in the format Amino Acid: Optimal codon.
+
+    `run_summary` is optional so the hotspot-avoidance adapter can recompute
+    this table after ORFModule has already written "orf_debug" - passing the
+    same RunSummary twice would raise KeyError on the duplicate key.
     """
     optimal_codons = {}
     codons_loss_score = {}
@@ -296,12 +300,13 @@ def _calculate_codons_loss(organisms: typing.Sequence[models.Organism],
             codon: codon_loss for codon, codon_loss in sorted(loss.items(), key=lambda item: item[1])
         }
 
-    orf_debug = {
-        "total_loss": codons_loss_score,
-        "optimized_loss": codons_loss_score_optimized,
-        "deoptimized_loss": codons_loss_score_deoptimized,
-    }
-    run_summary.add_to_run_summary("orf_debug", orf_debug)
+    if run_summary is not None:
+        orf_debug = {
+            "total_loss": codons_loss_score,
+            "optimized_loss": codons_loss_score_optimized,
+            "deoptimized_loss": codons_loss_score_deoptimized,
+        }
+        run_summary.add_to_run_summary("orf_debug", orf_debug)
     return codons_loss_score
 
 # --------------------------------------------------------------
