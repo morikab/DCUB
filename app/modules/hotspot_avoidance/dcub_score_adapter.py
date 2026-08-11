@@ -162,8 +162,14 @@ def _table_from_zscore(
         # _calculate_zscore_ratio_score takes a geometric mean, which is
         # undefined for the negative z-scores that standardization routinely
         # produces. Shift every candidate into a strictly positive range first,
-        # exactly as optimize_sequence_by_zscore_bulk_aa does - without this the
-        # whole table comes back nan.
+        # the same normalization strategy optimize_sequence_by_zscore_single_aa
+        # uses - without this the whole table comes back nan.
+        # (bulk_aa's own normalization additionally folds in the initial
+        # sequence's min/max and carries running bounds across its convergence
+        # loop, to keep scores comparable iteration-to-iteration; that
+        # bookkeeping is irrelevant here since this table is built once,
+        # against one fixed sequence, with no iterations to stay comparable
+        # across.)
         all_zscores = np.array(
             [point for zscore in codons_to_zscore.values() for point in zscore.all_scores]
         ).reshape(-1, 1)

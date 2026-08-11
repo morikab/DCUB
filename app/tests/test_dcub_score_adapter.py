@@ -302,3 +302,27 @@ class TestZscoreFamily:
 
         expected_best = max(expected_scores, key=expected_scores.get)
         assert max(table["C"], key=table["C"].get) == expected_best
+
+    def test_ratio_family_ranks_the_wanted_hosts_preferred_codon_higher(self):
+        # The ratio reducer is the only one that needs the positivity
+        # normalization, so it needs its own ranking check - "doesn't produce
+        # nan" (test_table_is_complete_and_finite) is not the same as "ranks
+        # correctly". Expected order comes from how the fixture is built
+        # (wanted host prefers TGT 0.9/0.1, unwanted host prefers TGC 0.9/0.1
+        # - see _zscore_organisms), NOT from re-running the implementation's
+        # own normalize-then-get_total_score pipeline, which would be
+        # tautological and would pass against any self-consistent bug.
+        method = models.ORFOptimizationMethod.zscore_bulk_aa_ratio
+        cub_index = models.ORFOptimizationCubIndex.codon_adaptation_index
+        organisms = _zscore_organisms()
+        sequence = "ATGTGTTGCAAA" * 5
+        module_input = _module_input(organisms, method, sequence=sequence)
+
+        table = build_dcub_codon_table(
+            module_input=module_input,
+            optimization_cub_index=cub_index,
+            sequence=sequence,
+            skipped_codons_num=0,
+        )
+
+        assert table["C"]["TGT"] > table["C"]["TGC"]
