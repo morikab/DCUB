@@ -89,8 +89,12 @@ class TestWidenSlippageBaseUnits:
         assert int(row["start"]) == 30
         assert int(row["end"]) == 45
         assert row["sequence"] == "AAAAAAAAAAAAAAA" == sequence[30:45]
-        # Untouched columns survive - optimization_engine indexes by name.
-        assert row["log10_prob_slippage_ecoli"] == pytest.approx(-1.965)
+        # The column survives (optimization_engine indexes by name) but is
+        # blanked: ESO derives it from the base unit and repeat count, so the
+        # detected value would no longer satisfy that formula on a
+        # re-parameterized row.
+        assert list(df.columns) == SLIPPAGE_COLUMNS
+        assert pd.isna(row["log10_prob_slippage_ecoli"])
 
     def test_dinucleotide_base_unit_widens_from_two_to_six(self):
         # These coordinates are real find_slippage_sites output for this sequence.
@@ -109,6 +113,21 @@ class TestWidenSlippageBaseUnits:
         assert int(row["end"]) == 39
         assert row["sequence"] == sequence[27:39]
         assert len(row["sequence"]) == 12
+
+    def test_base_unit_of_four_passes_through_untouched(self):
+        """Regression: widening anything already >= 3nt breaks repairs ESO
+        would have made. A 4nt unit clears ESO's `start < end - 2` filter as
+        detected, but widening it to lcm(4, 3) == 12 leaves (42 - 30) // 12 == 1
+        unit - below the 2-unit minimum - so the site would be dropped with a
+        warning instead of repaired."""
+        sequence = PLANTED_PREFIX + "ACGT" * 3 + PLANTED_SUFFIX
+        original = _slippage_df([30, 42, 4, "ACGTACGTACGT", 3, -4.56])
+        df, warnings_out = widen_slippage_base_units(original, sequence)
+
+        assert warnings_out == []
+        assert df.iloc[0].to_dict() == original.iloc[0].to_dict()
+        assert int(df.iloc[0]["length_base_unit"]) == 4
+        assert df.iloc[0]["log10_prob_slippage_ecoli"] == pytest.approx(-4.56)
 
     def test_codon_width_base_unit_passes_through_untouched(self):
         sequence = PLANTED_PREFIX + "GCT" * 5 + PLANTED_SUFFIX
@@ -230,6 +249,53 @@ class TestPatchSequence:
             "detected_sites",
             "warnings",
         }
+
+    def test_unwidenable_run_is_reported_but_still_counted_as_detected(self):
+        """The drop path, end to end through patch_sequence rather than through
+        the helper in isolation. A 2nt base unit widens to 6nt, and this run is
+        only 8nt long - one whole unit, below modify_df_slippage's minimum of
+        two - so it cannot be disrupted at codon resolution.
+
+        Pins all three wiring behaviours at once: the warning reaches the user,
+        `detected_sites` still reports the site as DETECTED (it is counted from
+        the original detection, not from the widened rows), and the sequence
+        comes back untouched rather than half-edited.
+        """
+        sequence = PLANTED_PREFIX + "CACACA" + PLANTED_SUFFIX
+        result = patch_sequence(
+            sequence=sequence,
+            codon_table=_flat_codon_table(),
+            skipped_codons_num=0,
+        )
+
+        # Detected - and still reported as such even though it was not repaired.
+        assert result.detected_sites["slippage"] == 1
+        assert result.warnings == [
+            "Slippage site at 30-38 (base unit 2nt) is too short to disrupt at "
+            "codon resolution and was left unmodified."
+        ]
+        assert result.sequence_after == sequence
+        assert result.num_edits == 0
+
+    def test_four_nucleotide_base_unit_repeat_is_repaired(self):
+        """Regression for the over-broad widening predicate: a 4nt base unit is
+        already wide enough for ESO's exclusion filter, so it must be passed
+        through as detected and actually repaired. Widening it to lcm(4, 3) == 12
+        left only one whole unit, which silently downgraded a repairable site to
+        an unrepairable one - with a warning that was itself wrong."""
+        repeat = "ACGT" * 3
+        sequence = PLANTED_PREFIX + repeat + PLANTED_SUFFIX
+        result = patch_sequence(
+            sequence=sequence,
+            codon_table=_flat_codon_table(),
+            skipped_codons_num=0,
+        )
+
+        assert result.detected_sites["slippage"] == 1
+        assert result.warnings == []
+        assert result.num_edits > 0
+        assert repeat not in result.sequence_after
+        assert translate(result.sequence_after) == translate(sequence)
 
     def test_customscore_performance_warning_is_not_surfaced_to_users(self):
         """ESO's CustomScore always warns about per-trial rescoring cost. That is

@@ -89,8 +89,9 @@ def widen_slippage_base_units(
     df_slippage: typing.Optional[pd.DataFrame],
     sequence: str,
 ) -> typing.Tuple[typing.Optional[pd.DataFrame], typing.List[str]]:
-    """Re-express sub-codon slippage base units as the smallest codon-width
-    multiple, so they survive ESO's exclusion filtering.
+    """Re-express SUB-CODON slippage base units - and only those, i.e.
+    `length_base_unit` of 1 or 2 - as the smallest codon-width multiple, so
+    they survive ESO's exclusion filtering.
 
     ESO's `exclusion_site_correcter` drops every avoidance row narrower than
     3nt (`df[df.start < df.end - 2]`) whenever exclusion regions are passed -
@@ -105,6 +106,15 @@ def widen_slippage_base_units(
     avoidance in rows wide enough to survive. Verified: 0 edits before, 2
     after, with flanks byte-identical.
 
+    Base units of 3nt and wider are left exactly as detected. They already
+    clear ESO's filter, so they never had the problem - and widening them
+    would actively cause harm: it raises the repeat count needed for any
+    repair from the detector's own minimum of 3 (see
+    eso/detection/slippage.py `_generate_slippage_sites_current_subunit`) to
+    6, and halves avoidance density above that. A 4nt-unit repeat like
+    3x"ACGT" is repaired fine untouched, but becomes unrepairable if widened
+    to 12nt units - `(42 - 30) // 12 == 1`, below the 2-unit minimum.
+
     Returns (widened_dataframe, warnings) - `warnings` names any run too
     short to disrupt at codon resolution, so it is reported rather than
     silently skipped.
@@ -116,7 +126,9 @@ def widen_slippage_base_units(
     widening_warnings = []
     for _, row in df_slippage.iterrows():
         length_base_unit = int(row["length_base_unit"])
-        if length_base_unit % 3 == 0:
+        if length_base_unit >= 3:
+            # Already wide enough to survive `df[df.start < df.end - 2]`.
+            # See the docstring: widening these breaks working repairs.
             rows.append(row.to_dict())
             continue
 
@@ -147,6 +159,19 @@ def widen_slippage_base_units(
             # Recomputed, never carried over: the row must stay honest about
             # what is actually at these (possibly shortened) coordinates.
             "sequence": sequence[start:widened_end],
+            # Blanked for the same reason. ESO derives this from the base unit
+            # and repeat count (-12.9 + 0.729n for 1nt units, -4.749 + 0.063n
+            # otherwise), so carrying the detected value onto a re-parameterized
+            # row leaves a triple that no longer satisfies ESO's own formula -
+            # a trap for anyone who later reads it. Recomputing it from the
+            # widened parameters would be worse: it would understate a real
+            # homopolymer's risk by orders of magnitude (a 15x"A" run scores
+            # -1.97, but 5x"AAA" through the non-homopolymer branch scores
+            # -4.43) while looking authoritative. The widened row exists only
+            # to generate AvoidPattern constraints; the true risk of the
+            # physical site stays in the original detection dataframe, which
+            # is what detected_sites is counted from.
+            "log10_prob_slippage_ecoli": np.nan,
         })
         rows.append(widened_row)
 
