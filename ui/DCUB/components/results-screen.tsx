@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ArrowLeft, Download, Copy, CheckCircle, BarChart3, Dna, Clock, RefreshCw } from "lucide-react"
 import { OrganismDistChart } from "@/components/organism-dist-chart"
+import { HotspotAvoidancePanel } from "@/components/hotspot-avoidance-panel"
 import type { OptimizationResult } from "@/lib/types"
 
 interface ResultsScreenProps {
@@ -260,6 +261,10 @@ ${result.optimized_sequence}`
               </div>
             </CardContent>
           </Card>
+
+          {result.hotspot_avoidance?.enabled && (
+            <HotspotAvoidancePanel result={result.hotspot_avoidance} />
+          )}
         </div>
 
         {/* Per-Organism CUB Difference */}
