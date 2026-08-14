@@ -113,7 +113,7 @@ class TestRunHotspotAvoidance:
         seen = []
 
         def fake_run_module(sequence, module_input, optimization_cub_index, skipped_codons_num):
-            seen.append(sequence)
+            seen.append((sequence, optimization_cub_index))
             return HotspotPatchResult(
                 sequence_before=sequence,
                 sequence_after=sequence.replace("AAA", "AAG", 1),
@@ -144,7 +144,18 @@ class TestRunHotspotAvoidance:
             skipped_codons_num=0,
         )
 
-        assert seen == cai + tai, "every candidate in both lists must be patched"
+        assert [sequence for sequence, _ in seen] == cai + tai, (
+            "every candidate in both lists must be patched"
+        )
+        # The CAI list must be scored with codon_adaptation_index and the tAI list with
+        # trna_adaptation_index - never max_codon_trna_adaptation_index. That value would
+        # resolve to a "max_cai_tai_profile" attribute Organism does not have, so
+        # build_dcub_codon_table's getattr would fall back to {} and hand the optimizer an
+        # all-zero codon table with no error raised anywhere.
+        assert [index for _, index in seen] == (
+            [models.ORFOptimizationCubIndex.codon_adaptation_index] * len(cai)
+            + [models.ORFOptimizationCubIndex.trna_adaptation_index] * len(tai)
+        )
         assert patched_cai == [candidate.replace("AAA", "AAG", 1) for candidate in cai]
         assert patched_tai == [candidate.replace("AAA", "AAG", 1) for candidate in tai]
         # The summary lookup is keyed by the PATCHED sequence, so the winner can
