@@ -306,10 +306,6 @@ class HotspotAvoidanceModule(object):
         recombination_mode: typing.Optional[str] = None,
         slippage_mode: typing.Optional[str] = None,
     ) -> HotspotPatchResult:
-        logger.info("\n##########################")
-        logger.info("# HOTSPOT AVOIDANCE #")
-        logger.info("##########################")
-
         codon_table = build_dcub_codon_table(
             module_input=module_input,
             optimization_cub_index=optimization_cub_index,

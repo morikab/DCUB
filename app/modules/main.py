@@ -95,10 +95,15 @@ def run_modules(user_input: models.UserInput,
             # Report the section for the candidate evaluation actually picked -
             # EvaluationModuleResult.sequence is verbatim the string that was
             # scored, so the patched sequence is the key.
-            run_summary.put_in_run_summary(
-                "hotspot_avoidance",
-                hotspot_summaries.get(winning_result.sequence, {"enabled": True}),
-            )
+            winning_summary = hotspot_summaries.get(winning_result.sequence)
+            if winning_summary is None:
+                logger.warning(
+                    "No hotspot avoidance summary found for the winning sequence; "
+                    "the run summary will report an unqualified 'enabled' with no "
+                    "detected-site or edit detail."
+                )
+                winning_summary = {"enabled": True}
+            run_summary.put_in_run_summary("hotspot_avoidance", winning_summary)
         run_summary.save_run_summary(output_path)
 
         final_output = run_summary.get()
@@ -251,6 +256,12 @@ def run_hotspot_avoidance(
                 original_sequence=candidate,
                 new_sequence=result.sequence_after,
             )
+            # Keyed by patched sequence: if two candidates converge to the same
+            # patched string, the later one's summary wins here. Harmless in
+            # practice - sequence_after is correct by construction either way,
+            # so the displayed "after" always matches what ships. Only the
+            # diff's before-column and num_edits could then be attributed to a
+            # sibling candidate.
             summaries[result.sequence_after] = result.summary
             patched.append(result.sequence_after)
         return patched

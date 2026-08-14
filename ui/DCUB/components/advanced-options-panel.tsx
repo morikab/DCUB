@@ -201,9 +201,11 @@ export function AdvancedOptionsPanel({ isOpen, onClose }: AdvancedOptionsPanelPr
                 <div className="group relative">
                   <Info className="w-4 h-4 text-gray-400 cursor-help" />
                   <div className="absolute left-6 top-0 w-64 p-2 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                    Detects hypermutable sites (replication slippage, recombination-mediated deletion, methylation
-                    motifs) in the optimized sequence and edits only those sites away. Codon choices everywhere else
-                    are locked. Can noticeably slow down Z-Score methods, which produce several candidates.
+                    Detects hypermutable sites (replication slippage, recombination-mediated deletion) in the
+                    optimized sequence and edits only those sites away. Codon choices everywhere else are locked.
+                    Methylation-motif detection is available but off by default (enable it in
+                    app/modules/configuration.yaml). Can noticeably slow down Z-Score methods, which produce
+                    several candidates.
                   </div>
                 </div>
               </CardTitle>
