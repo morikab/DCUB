@@ -47,7 +47,8 @@ class UserInputModule(object):
             initiation_optimization_method=self.user_input.initiation_optimization_method,
             evaluation_score=self.user_input.evaluation_score_type,
             clusters_count=self.user_input.clusters_count,
-            output_path=self.user_input.output_path
+            output_path=self.user_input.output_path,
+            enable_hotspot_avoidance=self.user_input.enable_hotspot_avoidance,
         )
 
         run_summary.add_to_run_summary("module_input", module_input.summary)
