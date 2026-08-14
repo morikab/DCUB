@@ -118,7 +118,30 @@ sequence that isn't what ships.
   scoring against the final candidate). Callers never need to know which
   family produced the table.
 - `hotspot_avoidance_main.py` - detection plus the `eso.optimize.optimization_engine`
-  call.
+  call. Reads `config["HOTSPOT_AVOIDANCE"]` (module-scope `config =
+  Configuration.get_config()`, matching `orf_main.py`'s pattern) **inside**
+  `patch_sequence`, not as a signature default - a signature default is
+  evaluated once at import time and can never be monkeypatched, which one of
+  the module's own tests depends on.
+
+Motif detection (`COMPUTE_MOTIFS` in `configuration.yaml`'s
+`HOTSPOT_AVOIDANCE` section) is **off by default**; slippage and
+recombination detection are always on. ESO's PSSM-based motif scanner keeps
+every position scoring above random chance, which is correct for a
+genuinely degenerate binding motif but wrong for a fixed consensus like
+`dam`'s `GATC` - a 3-of-4 near-match (`GATG`, `GTTC`, ...) carries no real
+methylation risk but still scores positive. Measured on a 711nt real gene
+(mCherry against E. coli/B. subtilis): motif detection produced 83 hits
+driving 72 edits across 24.9% of the gene's codons, and of 37 `dam` hits
+only 2 were genuine `GATC` sites. `COMMON_MOTIFS` also defaults to `["dam",
+"dcm"]` rather than ESO's full bundle - `shine_dalgarno` and the two
+`sigma70` boxes are regulatory elements, not hypermutable sites. The deeper
+fix (exact-consensus filtering or a tighter PSSM threshold) belongs in ESO
+and is deferred to a follow-up spec; this task only changes DCUB's default
+and exposes `RECOMBINATION_MODE`/`SLIPPAGE_MODE`/`COMPUTE_MOTIFS`/
+`COMMON_MOTIFS` as config, threaded through `patch_sequence` and
+`HotspotAvoidanceModule.run_module` as same-named optional keyword
+arguments that fall back to config when omitted.
 
 Three non-obvious details in the `optimization_engine` call, each guarding a
 real failure:

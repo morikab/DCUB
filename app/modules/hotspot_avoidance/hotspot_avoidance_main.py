@@ -21,6 +21,7 @@ from eso.optimize import optimization_engine
 
 from logger_factory.logger_factory import LoggerFactory
 from modules import models
+from modules.configuration import Configuration
 from modules.hotspot_avoidance.dcub_score_adapter import build_dcub_codon_table
 from modules.hotspot_avoidance.exclusion_regions import build_exclusion_regions
 from modules.hotspot_avoidance.exclusion_regions import hotspot_regions_from_detection
@@ -28,11 +29,7 @@ from modules.shared_functions_and_vars import nt_to_aa
 from modules.timer import Timer
 
 logger = LoggerFactory.get_logger()
-
-#: ESO's bundled generic motifs. Cheap to scan for and only consequential if
-#: actually found, so no organism-specific MEME file is needed to get value out
-#: of motif detection on day one.
-DEFAULT_COMMON_MOTIFS = ("dam", "dcm", "shine_dalgarno", "sigma70_minus35", "sigma70_minus10")
+config = Configuration.get_config()
 
 #: ESO's CustomScore unconditionally warns that it re-scores the whole ORF on
 #: every trial mutation. That is a known, accepted cost of Approach B - not
@@ -187,15 +184,43 @@ def patch_sequence(
     sequence: str,
     codon_table: typing.Mapping[str, typing.Mapping[str, float]],
     skipped_codons_num: int,
+    compute_motifs: typing.Optional[bool] = None,
+    common_motifs: typing.Optional[typing.List[str]] = None,
+    recombination_mode: typing.Optional[str] = None,
+    slippage_mode: typing.Optional[str] = None,
 ) -> HotspotPatchResult:
     """Detect hotspots in `sequence` and repair them without touching anything
-    else. Returns the patched sequence plus everything the run summary reports."""
+    else. Returns the patched sequence plus everything the run summary reports.
+
+    `compute_motifs`, `common_motifs`, `recombination_mode` and
+    `slippage_mode` default to `app/modules/configuration.yaml`'s
+    `HOTSPOT_AVOIDANCE` section when not supplied. The config is read here,
+    inside the function body, rather than as a signature default - a
+    signature default is evaluated once at import time and can never be
+    monkeypatched afterwards.
+    """
+    hotspot_config = config["HOTSPOT_AVOIDANCE"]
+    if compute_motifs is None:
+        compute_motifs = hotspot_config["COMPUTE_MOTIFS"]
+    if common_motifs is None:
+        common_motifs = hotspot_config["COMMON_MOTIFS"]
+    if recombination_mode is None:
+        recombination_mode = hotspot_config["RECOMBINATION_MODE"]
+    if slippage_mode is None:
+        slippage_mode = hotspot_config["SLIPPAGE_MODE"]
+
     with Timer() as timer:
+        extractor_kwargs = {
+            "recombination_mode": recombination_mode,
+            "slippage_mode": slippage_mode,
+        }
+        if compute_motifs:
+            extractor_kwargs["common_motifs"] = list(common_motifs)
         detection = suspect_site_extractor(
             sequence,
-            compute_motifs=True,
+            compute_motifs=compute_motifs,
             num_sites=np.inf,
-            common_motifs=list(DEFAULT_COMMON_MOTIFS),
+            **extractor_kwargs,
         )
 
         detected_sites = {
@@ -276,6 +301,10 @@ class HotspotAvoidanceModule(object):
         module_input: models.ModuleInput,
         optimization_cub_index: models.ORFOptimizationCubIndex,
         skipped_codons_num: int,
+        compute_motifs: typing.Optional[bool] = None,
+        common_motifs: typing.Optional[typing.List[str]] = None,
+        recombination_mode: typing.Optional[str] = None,
+        slippage_mode: typing.Optional[str] = None,
     ) -> HotspotPatchResult:
         logger.info("\n##########################")
         logger.info("# HOTSPOT AVOIDANCE #")
@@ -291,4 +320,8 @@ class HotspotAvoidanceModule(object):
             sequence=sequence,
             codon_table=codon_table,
             skipped_codons_num=skipped_codons_num,
+            compute_motifs=compute_motifs,
+            common_motifs=common_motifs,
+            recombination_mode=recombination_mode,
+            slippage_mode=slippage_mode,
         )

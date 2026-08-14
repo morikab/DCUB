@@ -308,3 +308,124 @@ class TestPatchSequence:
             skipped_codons_num=0,
         )
         assert not any("re-evaluates score_fn" in warning for warning in result.warnings)
+
+
+class TestDetectionConfiguration:
+    def test_motifs_are_off_by_default(self, monkeypatch):
+        """Motif detection is off unless explicitly enabled - ESO's PSSM scan
+        reports far more sites than are biologically real, and each one is a
+        licence to rewrite DCUB's chosen codons."""
+        captured = {}
+
+        def fake_extractor(target_seq, compute_motifs, num_sites, **kwargs):
+            captured["compute_motifs"] = compute_motifs
+            captured["common_motifs"] = kwargs.get("common_motifs")
+            import pandas as pd
+            return {"df_recombination": pd.DataFrame(), "df_slippage": pd.DataFrame()}
+
+        monkeypatch.setattr(
+            "modules.hotspot_avoidance.hotspot_avoidance_main.suspect_site_extractor",
+            fake_extractor,
+        )
+        patch_sequence(
+            sequence=CLEAN_SEQUENCE,
+            codon_table=_flat_codon_table(),
+            skipped_codons_num=0,
+        )
+        assert captured["compute_motifs"] is False
+
+    def test_motifs_can_be_enabled_explicitly(self, monkeypatch):
+        captured = {}
+
+        def fake_extractor(target_seq, compute_motifs, num_sites, **kwargs):
+            captured["compute_motifs"] = compute_motifs
+            captured["common_motifs"] = kwargs.get("common_motifs")
+            import pandas as pd
+            return {
+                "df_recombination": pd.DataFrame(),
+                "df_slippage": pd.DataFrame(),
+                "df_motifs": pd.DataFrame(),
+            }
+
+        monkeypatch.setattr(
+            "modules.hotspot_avoidance.hotspot_avoidance_main.suspect_site_extractor",
+            fake_extractor,
+        )
+        patch_sequence(
+            sequence=CLEAN_SEQUENCE,
+            codon_table=_flat_codon_table(),
+            skipped_codons_num=0,
+            compute_motifs=True,
+            common_motifs=["dam"],
+        )
+        assert captured["compute_motifs"] is True
+        assert captured["common_motifs"] == ["dam"]
+
+    def test_config_defaults_are_used_when_no_override_is_given(self, monkeypatch):
+        """The config is the single source of truth for defaults, so an operator
+        can enable motifs deployment-wide without a code change."""
+        from modules.hotspot_avoidance import hotspot_avoidance_main
+
+        captured = {}
+
+        def fake_extractor(target_seq, compute_motifs, num_sites, **kwargs):
+            captured["compute_motifs"] = compute_motifs
+            captured["common_motifs"] = kwargs.get("common_motifs")
+            import pandas as pd
+            return {
+                "df_recombination": pd.DataFrame(),
+                "df_slippage": pd.DataFrame(),
+                "df_motifs": pd.DataFrame(),
+            }
+
+        monkeypatch.setattr(
+            hotspot_avoidance_main, "suspect_site_extractor", fake_extractor
+        )
+        monkeypatch.setitem(
+            hotspot_avoidance_main.config["HOTSPOT_AVOIDANCE"], "COMPUTE_MOTIFS", True
+        )
+        monkeypatch.setitem(
+            hotspot_avoidance_main.config["HOTSPOT_AVOIDANCE"], "COMMON_MOTIFS", ["dcm"]
+        )
+        patch_sequence(
+            sequence=CLEAN_SEQUENCE,
+            codon_table=_flat_codon_table(),
+            skipped_codons_num=0,
+        )
+        assert captured["compute_motifs"] is True
+        assert captured["common_motifs"] == ["dcm"]
+
+    def test_detection_modes_are_passed_through(self, monkeypatch):
+        from modules.hotspot_avoidance import hotspot_avoidance_main
+
+        captured = {}
+
+        def fake_extractor(target_seq, compute_motifs, num_sites, **kwargs):
+            captured.update(kwargs)
+            import pandas as pd
+            return {"df_recombination": pd.DataFrame(), "df_slippage": pd.DataFrame()}
+
+        monkeypatch.setattr(
+            hotspot_avoidance_main, "suspect_site_extractor", fake_extractor
+        )
+        patch_sequence(
+            sequence=CLEAN_SEQUENCE,
+            codon_table=_flat_codon_table(),
+            skipped_codons_num=0,
+            recombination_mode="fast",
+            slippage_mode="fast",
+        )
+        assert captured["recombination_mode"] == "fast"
+        assert captured["slippage_mode"] == "fast"
+
+    def test_detected_sites_reports_zero_motifs_when_disabled(self):
+        """With motifs off, suspect_site_extractor omits df_motifs entirely -
+        the count must still be present and zero, not missing, since the
+        frontend contract requires all three keys."""
+        result = patch_sequence(
+            sequence=CLEAN_SEQUENCE,
+            codon_table=_flat_codon_table(),
+            skipped_codons_num=0,
+        )
+        assert result.detected_sites["motifs"] == 0
+        assert set(result.detected_sites) == {"recombination", "slippage", "motifs"}

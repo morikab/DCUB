@@ -10,3 +10,20 @@ ORF:
   ZSCORE_INITIAL_PERMUTATIONS_NUM: 3
   FREQUENCY_OPTIMIZATION_THRESHOLD: 0.1
   DEDUP_CODONS: False
+HOTSPOT_AVOIDANCE:
+  # Motif detection is OFF by default. ESO's PSSM-based motif scan keeps every
+  # position scoring above random chance, so a fixed consensus like dam's GATC
+  # also matches 3-of-4 near-matches that carry no methylation risk. Measured on
+  # mCherry: 37 "dam" hits of which only 2 were real GATC sites, driving edits to
+  # ~25% of the gene's codons. Recombination and slippage detection are
+  # unaffected and remain on.
+  COMPUTE_MOTIFS: False
+  # Used only when COMPUTE_MOTIFS is True. Restricted to the two genuine
+  # methylation motifs; shine_dalgarno and the sigma70 boxes are regulatory
+  # elements, not hypermutable sites.
+  COMMON_MOTIFS: ["dam", "dcm"]
+  # See eso.detection.dispatch: "thorough" (Levenshtein-tolerant) or "fast"
+  # (exact 16-mer match only) for recombination; "default" or "fast" for
+  # slippage, which detect identical sites.
+  RECOMBINATION_MODE: "thorough"
+  SLIPPAGE_MODE: "default"

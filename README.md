@@ -90,8 +90,8 @@ If you prefer to build the tool from source (for development or customization), 
 
 With **Advanced Options → Hotspot Avoidance** set to **On**, DCUB runs
 [ESO](https://github.com/morikab/evolutionary-stability-optimizer) over each
-optimized candidate to detect hypermutable sites - replication slippage,
-recombination-mediated deletion, and methylation motifs - and edits them away.
+optimized candidate to detect hypermutable sites - replication slippage and
+recombination-mediated deletion, by default - and edits them away.
 
 Replacements inside a detected site are chosen using DCUB's own per-codon
 preference model, so they still reflect the wanted/unwanted-organism tradeoff.
@@ -109,14 +109,40 @@ thing directly.
 
 It is **off by default**; runs without it are unaffected.
 
-ESO's bundled methylation-motif detectors are deliberately permissive (they
-flag near-matches, not just exact hits), so expect a real gene to trigger a
-meaningful number of motif hits and a correspondingly non-trivial edit volume
-rather than a handful of isolated point fixes - on a 711nt real gene (mCherry
-against E. coli/B. subtilis), one verification run detected 75 motif
-candidates and edited roughly a quarter of the gene's codons. Translation is
-unaffected either way; this is a heads-up on edit volume, not a correctness
-concern.
+#### Methylation-motif detection is off by default
+
+Motif detection (`dam`, `dcm`, and ESO's other bundled motifs) is **off by
+default**, unlike slippage and recombination detection, which are always on
+whenever hotspot avoidance is enabled. It is dominated by false positives:
+ESO's PSSM-based motif scanner keeps every position that scores above random
+chance against the motif, which is the right behavior for a genuinely
+degenerate binding motif but not for a fixed consensus like `dam`'s `GATC` -
+Dam methylase only acts on the exact sequence, so a 3-of-4 near-match carries
+no real methylation risk. Measured on a 711nt real gene (mCherry against E.
+coli/B. subtilis): motif detection reported 83 hits and drove 72 edits
+touching **24.9%** of the gene's codons, but of the 37 `dam` hits, only **2**
+were genuine `GATC` sites - the rest were near-matches like `GATG`, `GTTC`,
+`TATC`, `CATC`. Three of ESO's other bundled motifs
+(`shine_dalgarno`, `sigma70_minus35`, `sigma70_minus10`) are regulatory
+elements (a ribosome binding site and promoter boxes), not hypermutable
+sites, and are excluded even when motif detection is turned on.
+
+The deeper fix (exact-consensus filtering, or tightening the PSSM threshold
+in ESO) is deferred to a follow-up; ESO itself is not modified by DCUB.
+
+To opt in, edit the `HOTSPOT_AVOIDANCE` section of
+`app/modules/configuration.yaml`:
+
+```yaml
+HOTSPOT_AVOIDANCE:
+  COMPUTE_MOTIFS: True
+  COMMON_MOTIFS: ["dam", "dcm"]   # restricted to genuine methylation motifs
+  RECOMBINATION_MODE: "thorough"  # or "fast" - see eso.detection.dispatch
+  SLIPPAGE_MODE: "default"        # or "fast"
+```
+
+Translation is unaffected either way this setting is configured; this is a
+heads-up on edit volume and false-positive rate, not a correctness concern.
 
 #### Sub-codon slippage limitation
 
