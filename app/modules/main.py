@@ -23,6 +23,8 @@ from modules import user_IO
 from modules.evaluation import models as evaluation_models
 from modules.evaluation.evaluation import EvaluationModule
 from modules import models
+from modules.hotspot_avoidance import HotspotAvoidanceModule
+from modules.shared_functions_and_vars import validate_module_output
 
 logger = LoggerFactory.get_logger()
 config = Configuration.read_config()
@@ -64,9 +66,18 @@ def run_modules(user_input: models.UserInput,
                 skipped_codons_num=initiation_optimized_codons_num,
                 run_summary=run_summary,
             ))
-        # ####################################### Evaluation ##############################################
+        # ####################################### Hotspot Avoidance #######################################
         evaluation_results = []
+        hotspot_summaries = {}
         for cds_nt_final_cai, cds_nt_final_tai in clustered_orf_results:
+            cds_nt_final_cai, cds_nt_final_tai, cluster_summaries = run_hotspot_avoidance(
+                module_input=module_input,
+                cds_nt_final_cai=cds_nt_final_cai,
+                cds_nt_final_tai=cds_nt_final_tai,
+                skipped_codons_num=initiation_optimized_codons_num,
+            )
+            hotspot_summaries.update(cluster_summaries)
+            # ####################################### Evaluation ##########################################
             evaluation_result = run_evaluation(
                 module_input=module_input,
                 cds_nt_final_cai=cds_nt_final_cai,
@@ -77,12 +88,22 @@ def run_modules(user_input: models.UserInput,
             evaluation_results.append(evaluation_result)
         # ###################################### Output Handling ##########################################
         output_path = module_input.output_path or str(artifacts_directory)
+
+        # TODO - handle multiple results in output generation module
+        winning_result = evaluation_results[0]
+        if module_input.enable_hotspot_avoidance:
+            # Report the section for the candidate evaluation actually picked -
+            # EvaluationModuleResult.sequence is verbatim the string that was
+            # scored, so the patched sequence is the key.
+            run_summary.put_in_run_summary(
+                "hotspot_avoidance",
+                hotspot_summaries.get(winning_result.sequence, {"enabled": True}),
+            )
         run_summary.save_run_summary(output_path)
 
         final_output = run_summary.get()
 
-        # TODO - handle multiple results in output generation module
-        evaluation_result = evaluation_results[0]
+        evaluation_result = winning_result
         if should_run_output_module:
             final_output["zip_output_file_path"] = user_IO.UserOutputModule.run_module(
                 cds_sequence=evaluation_result.sequence,
@@ -186,6 +207,57 @@ def run_orf_optimization(
         )
 
     return cds_nt_final_cai, cds_nt_final_tai
+
+
+def run_hotspot_avoidance(
+        module_input: models.ModuleInput,
+        cds_nt_final_cai: typing.Sequence[str],
+        cds_nt_final_tai: typing.Sequence[str],
+        skipped_codons_num: int,
+) -> typing.Tuple[typing.List[str], typing.List[str], typing.Dict[str, typing.Dict[str, typing.Any]]]:
+    """Repair hypermutable sites in EVERY ORF-optimization candidate, before
+    evaluation.
+
+    This has to run before run_evaluation, not after it: there is no
+    "already chosen winner" at this point, because selection IS the evaluation
+    step (choose_orf_optimization_result compares scores across every
+    candidate). Patching only the winner afterwards would leave the reported
+    final_evaluation - and the comparison that picked it - describing a
+    sequence that isn't what actually ships.
+
+    Returns the patched lists plus a {patched_sequence: summary} lookup, so the
+    caller can record the summary for whichever candidate evaluation picks.
+    """
+    if not module_input.enable_hotspot_avoidance:
+        return list(cds_nt_final_cai), list(cds_nt_final_tai), {}
+
+    logger.info('\n##########################')
+    logger.info('# HOTSPOT AVOIDANCE #')
+    logger.info('##########################')
+
+    summaries: typing.Dict[str, typing.Dict[str, typing.Any]] = {}
+
+    def _patch_all(candidates, optimization_cub_index):
+        patched = []
+        for candidate in candidates:
+            result = HotspotAvoidanceModule.run_module(
+                sequence=candidate,
+                module_input=module_input,
+                optimization_cub_index=optimization_cub_index,
+                skipped_codons_num=skipped_codons_num,
+            )
+            # Same validation every other module's output goes through.
+            validate_module_output(
+                original_sequence=candidate,
+                new_sequence=result.sequence_after,
+            )
+            summaries[result.sequence_after] = result.summary
+            patched.append(result.sequence_after)
+        return patched
+
+    patched_cai = _patch_all(cds_nt_final_cai, models.ORFOptimizationCubIndex.codon_adaptation_index)
+    patched_tai = _patch_all(cds_nt_final_tai, models.ORFOptimizationCubIndex.trna_adaptation_index)
+    return patched_cai, patched_tai, summaries
 
 
 def run_orf_module(user_input_dict: typing.Optional[typing.Dict[str, typing.Any]]):
