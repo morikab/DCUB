@@ -62,9 +62,17 @@ class TestDedupRetirement:
 
         assert ORFModule.should_dedup_codons(enable_hotspot_avoidance=True) is False
 
-    def test_dedup_follows_config_when_hotspot_avoidance_is_disabled(self):
+    def test_dedup_follows_config_when_hotspot_avoidance_is_disabled(self, monkeypatch):
+        # config["ORF"]["DEDUP_CODONS"] is False today, so asserting against
+        # it directly cannot tell the real helper apart from one that
+        # ignores the flag and always returns False. Drive the True branch
+        # explicitly so the "retire dedup" behaviour is actually exercised.
         from modules.configuration import Configuration
-        from modules.ORF.orf_main import ORFModule
+        from modules.ORF import orf_main
 
         expected = Configuration.get_config()["ORF"]["DEDUP_CODONS"]
-        assert ORFModule.should_dedup_codons(enable_hotspot_avoidance=False) == expected
+        assert orf_main.ORFModule.should_dedup_codons(enable_hotspot_avoidance=False) == expected
+
+        monkeypatch.setitem(orf_main.config["ORF"], "DEDUP_CODONS", True)
+        assert orf_main.ORFModule.should_dedup_codons(enable_hotspot_avoidance=False) is True
+        assert orf_main.ORFModule.should_dedup_codons(enable_hotspot_avoidance=True) is False
