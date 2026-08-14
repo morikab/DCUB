@@ -94,6 +94,49 @@ Pipeline stages, each implemented as a `*Module` class with a `run_module()` sta
 
 6. **UserOutputModule** (`user_IO/user_output.py`) — Writes the optimized sequence as a FASTA file and bundles it with the run log into a `communique_results.zip`.
 
+### Hotspot avoidance (`app/modules/hotspot_avoidance/`)
+
+Optional stage (`enable_hotspot_avoidance`, default `False`) that runs ESO's
+hypermutable-site detection and repair on every ORF-optimization candidate,
+between `run_orf_optimization()` and `run_evaluation()` in `main.py`.
+
+It must run *before* evaluation: selection IS the evaluation step
+(`choose_orf_optimization_result` compares scores over every candidate), so
+patching only the winner afterwards would make `final_evaluation` describe a
+sequence that isn't what ships.
+
+- `exclusion_regions.py` - interval algebra. `build_exclusion_regions` returns
+  the complement of the codon-boundary-widened hotspot windows, which becomes
+  DNAChisel `AvoidChanges` constraints. This is what makes locality mechanical
+  rather than hoped-for. The initiation-optimized prefix
+  (`skipped_codons_num * 3`) is always locked, or ESO would undo
+  `InitiationModule`'s weak-folding work.
+- `dcub_score_adapter.py` - `build_dcub_codon_table` normalizes DCUB's
+  per-codon preferences to **higher is better** for all three method families
+  (`single_codon_*` negates a loss table; `single_wanted_organism` reads the
+  wanted organism's CUB profile; `zscore_*` re-runs DCUB's own per-codon
+  scoring against the final candidate). Callers never need to know which
+  family produced the table.
+- `hotspot_avoidance_main.py` - detection plus the `eso.optimize.optimization_engine`
+  call.
+
+Three non-obvious details in the `optimization_engine` call, each guarding a
+real failure:
+- `orf_regions=[(0, len(sequence))]` is passed explicitly. The default is
+  `((len(seq) - 1) // 3) * 3`, which silently drops the last codon of a
+  length-multiple-of-3 sequence.
+- `mini_gc=0.0, maxi_gc=1.0` disables GC enforcement. DCUB doesn't manage GC,
+  and with everything outside the hotspots locked an out-of-range window is
+  unfixable - ESO's retry loop would drop the constraint and emit a warning
+  that means nothing to the user.
+- ESO's `CustomScore` always warns about per-trial rescoring cost; that warning
+  is filtered out of the user-facing `warnings` list, which is reserved for
+  genuine "could not clear this hotspot" reports.
+
+`_calculate_codons_loss` takes `run_summary=None` specifically so the adapter
+can recompute the loss table after `ORFModule` already wrote `"orf_debug"` -
+`RunSummary.add_to_run_summary` raises `KeyError` on a duplicate key.
+
 ### Key shared types (`app/modules/models.py`)
 
 - `UserInput` (Pydantic) — API request body; organism genomes are keyed by name as `Dict[str, OrganismRequest]`

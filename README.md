@@ -84,6 +84,50 @@ If you prefer to build the tool from source (for development or customization), 
 
 ---
 
+## Optimization options
+
+### Hotspot avoidance (optional)
+
+With **Advanced Options → Hotspot Avoidance** set to **On**, DCUB runs
+[ESO](https://github.com/morikab/evolutionary-stability-optimizer) over each
+optimized candidate to detect hypermutable sites - replication slippage,
+recombination-mediated deletion, and methylation motifs - and edits them away.
+
+Replacements inside a detected site are chosen using DCUB's own per-codon
+preference model, so they still reflect the wanted/unwanted-organism tradeoff.
+Every nucleotide outside a detected site is locked, so codon choices elsewhere
+cannot drift.
+
+This runs on every ORF-optimization candidate before evaluation, so the
+reported scores describe the sequence that actually ships. Z-Score methods
+produce several candidates (`1 + ZSCORE_INITIAL_PERMUTATIONS_NUM`, doubled for
+`max_CAI_tAI`), so expect a corresponding slowdown with those methods.
+
+While it is enabled, DCUB's own repeat-avoidance ("dedup") heuristic is turned
+off for that run - ESO's slippage and recombination detection measures the same
+thing directly.
+
+It is **off by default**; runs without it are unaffected.
+
+ESO's bundled methylation-motif detectors are deliberately permissive (they
+flag near-matches, not just exact hits), so expect a real gene to trigger a
+meaningful number of motif hits and a correspondingly non-trivial edit volume
+rather than a handful of isolated point fixes - on a 711nt real gene (mCherry
+against E. coli/B. subtilis), one verification run detected 75 motif
+candidates and edited roughly a quarter of the gene's codons. Translation is
+unaffected either way; this is a heads-up on edit volume, not a correctness
+concern.
+
+#### Sub-codon slippage limitation
+
+ESO discards slippage-avoidance patterns narrower than 3nt whenever locked
+regions are present, so DCUB re-expresses sub-codon repeat units (a 15×`A` run
+becomes 5×`AAA`) before handing them over. A repeat too short to yield two
+codon-width units cannot be disrupted at codon resolution; those are reported
+in the run summary's `warnings` rather than silently skipped.
+
+---
+
 ## Contact Details
 
 - Email: bentulila@mail.tau.ac.il  
