@@ -17,8 +17,16 @@ interface AdvancedOptionsPanelProps {
 }
 
 export function AdvancedOptionsPanel({ isOpen, onClose }: AdvancedOptionsPanelProps) {
-  const { tuningParameter, optimizationMethod, cubIndex, setTuningParameter, setOptimizationMethod, setCubIndex } =
-    useOptimizationStore()
+  const {
+    tuningParameter,
+    optimizationMethod,
+    cubIndex,
+    enableHotspotAvoidance,
+    setTuningParameter,
+    setOptimizationMethod,
+    setCubIndex,
+    setEnableHotspotAvoidance,
+  } = useOptimizationStore()
 
   const [localTuningParameter, setLocalTuningParameter] = useState([tuningParameter])
 
@@ -44,6 +52,7 @@ export function AdvancedOptionsPanel({ isOpen, onClose }: AdvancedOptionsPanelPr
     setTuningParameter(50)
     setOptimizationMethod("single_codon_diff")
     setCubIndex("CAI")
+    setEnableHotspotAvoidance(false)
     setLocalTuningParameter([50])
   }
 
@@ -184,6 +193,50 @@ export function AdvancedOptionsPanel({ isOpen, onClose }: AdvancedOptionsPanelPr
             </CardContent>
           </Card>
 
+          {/* Hotspot Avoidance */}
+          <Card>
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base flex items-center gap-2">
+                Hotspot Avoidance (ESO)
+                <div className="group relative">
+                  <Info className="w-4 h-4 text-gray-400 cursor-help" />
+                  <div className="absolute left-6 top-0 w-64 p-2 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                    Detects hypermutable sites (replication slippage, recombination-mediated deletion, methylation
+                    motifs) in the optimized sequence and edits only those sites away. Codon choices everywhere else
+                    are locked. Can noticeably slow down Z-Score methods, which produce several candidates.
+                  </div>
+                </div>
+              </CardTitle>
+              <CardDescription>Remove hypermutable sites from the optimized sequence</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <RadioGroup
+                value={enableHotspotAvoidance ? "yes" : "no"}
+                onValueChange={(value) => setEnableHotspotAvoidance(value === "yes")}
+                className="space-y-3"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="no" id="hotspot-no" />
+                  <Label htmlFor="hotspot-no" className="cursor-pointer">
+                    <div>
+                      <div className="font-medium">Off</div>
+                      <div className="text-sm text-gray-500">Default. Optimize codon usage only.</div>
+                    </div>
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="yes" id="hotspot-yes" />
+                  <Label htmlFor="hotspot-yes" className="cursor-pointer">
+                    <div>
+                      <div className="font-medium">On</div>
+                      <div className="text-sm text-gray-500">Also detect and repair hypermutable sites</div>
+                    </div>
+                  </Label>
+                </div>
+              </RadioGroup>
+            </CardContent>
+          </Card>
+
           {/* Current Settings Summary */}
           <Card className="bg-blue-50 border-blue-200">
             <CardHeader className="pb-3">
@@ -203,6 +256,10 @@ export function AdvancedOptionsPanel({ isOpen, onClose }: AdvancedOptionsPanelPr
               <div className="flex justify-between">
                 <span className="text-blue-700">CUB Index:</span>
                 <span className="font-medium text-blue-900">{cubIndex}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-blue-700">Hotspot Avoidance:</span>
+                <span className="font-medium text-blue-900">{enableHotspotAvoidance ? "On" : "Off"}</span>
               </div>
             </CardContent>
           </Card>
