@@ -100,6 +100,7 @@ export default function DNAOptimizerPage() {
           initiation_optimization_method: "original",
           output_path: `results/DCUB/${Date.now()}`,
           evaluation_score: "average_distance",
+          enable_hotspot_avoidance: currentState.enableHotspotAvoidance,
         },
       }
 
@@ -187,6 +188,20 @@ export default function DNAOptimizerPage() {
           is_wanted: o.is_wanted,
           dist_score: o.dist_score,
         })),
+        hotspot_avoidance: optimization_result.hotspot_avoidance
+          ? {
+              enabled: optimization_result.hotspot_avoidance.enabled ?? false,
+              sequence_before: optimization_result.hotspot_avoidance.sequence_before || "",
+              sequence_after: optimization_result.hotspot_avoidance.sequence_after || "",
+              num_edits: optimization_result.hotspot_avoidance.num_edits || 0,
+              detected_sites: {
+                recombination: optimization_result.hotspot_avoidance.detected_sites?.recombination || 0,
+                slippage: optimization_result.hotspot_avoidance.detected_sites?.slippage || 0,
+                motifs: optimization_result.hotspot_avoidance.detected_sites?.motifs || 0,
+              },
+              warnings: optimization_result.hotspot_avoidance.warnings ?? [],
+            }
+          : undefined,
       }
     } catch (error) {
       console.error("Error parsing response:", error)

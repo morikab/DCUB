@@ -41,4 +41,14 @@ export interface OptimizationResult {
     is_wanted: boolean
     dist_score: number
   }>
+  hotspot_avoidance?: HotspotAvoidanceResult
+}
+
+export interface HotspotAvoidanceResult {
+  enabled: boolean
+  sequence_before: string
+  sequence_after: string
+  num_edits: number
+  detected_sites: { recombination: number; slippage: number; motifs: number }
+  warnings: string[]
 }

@@ -16,6 +16,7 @@ interface OptimizationState {
   tuningParameter: number
   optimizationMethod: string
   cubIndex: string
+  enableHotspotAvoidance: boolean
 
   // Actions
   setDnaSequence: (sequence: string) => void
@@ -33,6 +34,7 @@ interface OptimizationState {
   setTuningParameter: (value: number) => void
   setOptimizationMethod: (method: string) => void
   setCubIndex: (index: string) => void
+  setEnableHotspotAvoidance: (enabled: boolean) => void
 
   reset: () => void
 }
@@ -46,6 +48,7 @@ const initialState = {
   tuningParameter: 50,
   optimizationMethod: "single_codon_diff",
   cubIndex: "CAI",
+  enableHotspotAvoidance: false,
 }
 
 export const useOptimizationStore = create<OptimizationState>()(
@@ -90,6 +93,7 @@ export const useOptimizationStore = create<OptimizationState>()(
       setTuningParameter: (value) => set({ tuningParameter: value }),
       setOptimizationMethod: (method) => set({ optimizationMethod: method }),
       setCubIndex: (index) => set({ cubIndex: index }),
+      setEnableHotspotAvoidance: (enabled) => set({ enableHotspotAvoidance: enabled }),
 
       reset: () => set(initialState),
     }),
@@ -102,6 +106,7 @@ export const useOptimizationStore = create<OptimizationState>()(
         tuningParameter: state.tuningParameter,
         optimizationMethod: state.optimizationMethod,
         cubIndex: state.cubIndex,
+        enableHotspotAvoidance: state.enableHotspotAvoidance,
       }),
     },
   ),
