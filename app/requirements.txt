@@ -37,6 +37,7 @@ openpyxl~=3.1.2
 fastapi
 uvicorn
 
-# ESO is a local path dependency - install it with:
-#   pip install -e ../evolutionary-stability-optimizer
+# ESO is not on PyPI - install it from git at the revision pinned in
+# poetry.lock:
+#   pip install "eso @ git+https://github.com/itamar-menuhin/evolutionary-stability-optimizer.git@37f82bc"
 # (Poetry is the source of truth; see repo-root pyproject.toml.)

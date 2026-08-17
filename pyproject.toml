@@ -46,10 +46,15 @@ fastapi = "^0.103.2"
 uvicorn = "^0.39.0"
 python-multipart = "^0.0.20"
 
-# Hypermutable-site detection and repair (unpublished sibling repo).
-# Path is relative to this file; `develop = true` keeps it editable so ESO
-# changes are picked up without a reinstall.
-eso = { path = "../evolutionary-stability-optimizer", develop = true }
+# Hypermutable-site detection and repair. Not on PyPI, so it is pinned to a
+# git revision rather than a relative path: a relative path resolves against
+# whatever directory pyproject.toml happens to sit in, which breaks inside a
+# git worktree (`.worktrees/<branch>/..` is not the sibling checkout) and on
+# CI, where no sibling checkout exists at all. Bump `rev` to adopt a newer
+# ESO; for local ESO development, override with
+# `poetry add --editable ../evolutionary-stability-optimizer` and do not
+# commit the result.
+eso = { git = "https://github.com/itamar-menuhin/evolutionary-stability-optimizer.git", rev = "37f82bc" }
 
 [tool.poetry.group.analysis]
 optional = true

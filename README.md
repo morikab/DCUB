@@ -89,7 +89,7 @@ If you prefer to build the tool from source (for development or customization), 
 ### Hotspot avoidance (optional)
 
 With **Advanced Options → Hotspot Avoidance** set to **On**, DCUB runs
-[ESO](https://github.com/morikab/evolutionary-stability-optimizer) over each
+[ESO](https://github.com/itamar-menuhin/evolutionary-stability-optimizer) over each
 optimized candidate to detect hypermutable sites - replication slippage and
 recombination-mediated deletion, by default - and edits them away.
 
