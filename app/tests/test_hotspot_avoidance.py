@@ -247,8 +247,69 @@ class TestPatchSequence:
             "sequence_after",
             "num_edits",
             "detected_sites",
+            "detected_regions",
             "warnings",
         }
+
+
+class TestDetectedRegions:
+    """The regions drive the frontend's highlight overlay, so their coordinate
+    convention is load-bearing: 0-indexed, exclusive end, into sequence_before."""
+
+    def test_regions_are_reported_with_kind_and_coordinates(self):
+        # A 15x"A" homopolymer, in frame, with clean flanks.
+        sequence = "ATG" + "AAA" * 5 + "GCTTGTGATGAACAT"
+        result = patch_sequence(
+            sequence=sequence,
+            codon_table=_flat_codon_table(),
+            skipped_codons_num=0,
+        )
+
+        assert result.detected_regions, "the planted homopolymer must be reported"
+        for region in result.detected_regions:
+            assert set(region) == {"kind", "start", "end"}
+            assert region["kind"] in {"recombination", "slippage", "motifs"}
+            assert 0 <= region["start"] < region["end"] <= len(sequence)
+
+    def test_region_slices_sequence_before_at_the_hotspot(self):
+        """The decisive property: slicing sequence_before with a reported
+        region must return the hotspot itself. An off-by-one or an inclusive
+        end would put the highlight on the wrong nucleotides."""
+        sequence = "ATG" + "AAA" * 5 + "GCTTGTGATGAACAT"
+        result = patch_sequence(
+            sequence=sequence,
+            codon_table=_flat_codon_table(),
+            skipped_codons_num=0,
+        )
+
+        slippage = [r for r in result.detected_regions if r["kind"] == "slippage"]
+        assert slippage, "a 15nt homopolymer is a slippage site"
+        for region in slippage:
+            assert set(result.sequence_before[region["start"]:region["end"]]) == {"A"}
+
+    def test_counts_and_regions_agree(self):
+        sequence = "ATG" + "AAA" * 5 + "GCTTGTGATGAACAT"
+        result = patch_sequence(
+            sequence=sequence,
+            codon_table=_flat_codon_table(),
+            skipped_codons_num=0,
+        )
+
+        # Recombination reports a PAIR of windows per detected row, so its
+        # region count is twice its site count; the other two are 1:1.
+        kinds = [region["kind"] for region in result.detected_regions]
+        assert kinds.count("slippage") == result.detected_sites["slippage"]
+        assert kinds.count("motifs") == result.detected_sites["motifs"]
+        assert kinds.count("recombination") == 2 * result.detected_sites["recombination"]
+
+    def test_a_clean_sequence_reports_no_regions(self):
+        result = patch_sequence(
+            sequence=CLEAN_SEQUENCE,
+            codon_table=_flat_codon_table(),
+            skipped_codons_num=0,
+        )
+        assert result.detected_regions == []
+        assert result.summary["detected_regions"] == []
 
     def test_unwidenable_run_is_reported_but_still_counted_as_detected(self):
         """The drop path, end to end through patch_sequence rather than through

@@ -103,6 +103,14 @@ reported scores describe the sequence that actually ships. Z-Score methods
 produce several candidates (`1 + ZSCORE_INITIAL_PERMUTATIONS_NUM`, doubled for
 `max_CAI_tAI`), so expect a corresponding slowdown with those methods.
 
+The results screen shows every detected site highlighted on the sequence *as it
+was before repair*, colour-coded by type, with a list of their positions
+(1-indexed and inclusive, the way a position is normally read). Below it, the
+before/after diff shows which nucleotides actually changed. The two are not the
+same set: a site can be detected and reported but left unedited when it is too
+narrow to disrupt with a synonymous codon swap, and in that case the panel says
+so rather than claiming the sequence was clean.
+
 While it is enabled, DCUB's own repeat-avoidance ("dedup") heuristic is turned
 off for that run - ESO's slippage and recombination detection measures the same
 thing directly.

@@ -111,6 +111,17 @@ sequence that isn't what ships.
   rather than hoped-for. The initiation-optimized prefix
   (`skipped_codons_num * 3`) is always locked, or ESO would undo
   `InitiationModule`'s weak-folding work.
+  `labeled_hotspot_regions_from_detection` is the single place each detector's
+  differing coordinate convention is normalized (recombination reports a *pair*
+  of windows per row; methylation's `end_index` is **inclusive** and gets the
+  `+ 1`). `hotspot_regions_from_detection` is the tuple-only view of the same
+  windows, so the constraint path and the UI cannot drift apart.
+  The labeled form reaches the UI as `summary["detected_regions"]`:
+  `{"kind", "start", "end"}`, 0-indexed exclusive-end into `sequence_before`.
+  These are what was **detected**, not what was edited - a window too narrow to
+  disrupt at codon resolution appears here and is deliberately left alone,
+  which is exactly the case the panel needs in order to explain a 0-edit run
+  that still found sites.
 - `dcub_score_adapter.py` - `build_dcub_codon_table` normalizes DCUB's
   per-codon preferences to **higher is better** for all three method families
   (`single_codon_*` negates a loss table; `single_wanted_organism` reads the

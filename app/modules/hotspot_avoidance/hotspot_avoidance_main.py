@@ -25,7 +25,7 @@ from modules.configuration import Configuration
 from modules.hotspot_avoidance.dcub_score_adapter import build_dcub_codon_table
 from modules.run_summary import RunSummary
 from modules.hotspot_avoidance.exclusion_regions import build_exclusion_regions
-from modules.hotspot_avoidance.exclusion_regions import hotspot_regions_from_detection
+from modules.hotspot_avoidance.exclusion_regions import labeled_hotspot_regions_from_detection
 from modules.shared_functions_and_vars import nt_to_aa
 from modules.timer import Timer
 
@@ -46,6 +46,12 @@ class HotspotPatchResult:
     num_edits: int
     detected_sites: typing.Dict[str, int]
     warnings: typing.List[str] = field(default_factory=list)
+    #: Every detected window as {"kind", "start", "end"}, 0-indexed with an
+    #: exclusive end, in SEQUENCE_BEFORE coordinates. Repair is synonymous and
+    #: therefore length-preserving, so these index sequence_after identically -
+    #: but they mark what was DETECTED, which is not the same as what was
+    #: edited: a window too narrow to disrupt is reported here and left alone.
+    detected_regions: typing.List[typing.Dict[str, typing.Any]] = field(default_factory=list)
 
     @property
     def summary(self) -> typing.Dict[str, typing.Any]:
@@ -55,6 +61,7 @@ class HotspotPatchResult:
             "sequence_after": self.sequence_after,
             "num_edits": self.num_edits,
             "detected_sites": self.detected_sites,
+            "detected_regions": self.detected_regions,
             "warnings": self.warnings,
         }
 
@@ -231,7 +238,10 @@ def patch_sequence(
         }
         logger.info(f"Detected hypermutable sites: {detected_sites}")
 
-        hotspot_regions = hotspot_regions_from_detection(detection)
+        detected_regions = labeled_hotspot_regions_from_detection(detection)
+        hotspot_regions = sorted(
+            (region["start"], region["end"]) for region in detected_regions
+        )
         if not hotspot_regions:
             return HotspotPatchResult(
                 sequence_before=sequence,
@@ -239,6 +249,7 @@ def patch_sequence(
                 num_edits=0,
                 detected_sites=detected_sites,
                 warnings=[],
+                detected_regions=detected_regions,
             )
 
         exclusion_regions = build_exclusion_regions(
@@ -292,6 +303,7 @@ def patch_sequence(
         num_edits=int(num_edits),
         detected_sites=detected_sites,
         warnings=surfaced_warnings,
+        detected_regions=detected_regions,
     )
 
 

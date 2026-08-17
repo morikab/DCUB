@@ -199,6 +199,7 @@ export default function DNAOptimizerPage() {
                 slippage: optimization_result.hotspot_avoidance.detected_sites?.slippage || 0,
                 motifs: optimization_result.hotspot_avoidance.detected_sites?.motifs || 0,
               },
+              detected_regions: optimization_result.hotspot_avoidance.detected_regions ?? [],
               warnings: optimization_result.hotspot_avoidance.warnings ?? [],
             }
           : undefined,

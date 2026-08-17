@@ -64,11 +64,14 @@ def widen_to_codon_boundaries(
     return [((int(start) // 3) * 3, -(-int(end) // 3) * 3) for start, end in regions]
 
 
-def hotspot_regions_from_detection(
+def labeled_hotspot_regions_from_detection(
     detection: typing.Mapping[str, typing.Any],
-) -> typing.List[typing.Tuple[int, int]]:
+) -> typing.List[typing.Dict[str, typing.Any]]:
     """Flatten `eso.suspect_site_extractor`'s dict of dataframes into a sorted
-    list of (start, end) hotspot windows.
+    list of `{"kind", "start", "end"}` hotspot windows.
+
+    Coordinates are 0-indexed with an EXCLUSIVE end, into the sequence
+    detection ran on - i.e. the pre-repair sequence.
 
     Each detector reports its coordinates differently:
       - df_recombination: a PAIR of regions per row (start_1/end_1 and
@@ -80,26 +83,46 @@ def hotspot_regions_from_detection(
         codebase's exclusive-end convention. Omitting it makes every motif
         window one nucleotide too short to contain its own motif, which in ESO
         itself once made motif avoidance silently do nothing.
+
+    `kind` is one of "recombination" / "slippage" / "motifs", matching the keys
+    of `HotspotPatchResult.detected_sites`.
     """
-    regions = []
+    regions: typing.List[typing.Dict[str, typing.Any]] = []
 
     df_recombination = detection.get("df_recombination")
     if df_recombination is not None and not df_recombination.empty:
         for _, row in df_recombination.iterrows():
-            regions.append((int(row["start_1"]), int(row["end_1"])))
-            regions.append((int(row["start_2"]), int(row["end_2"])))
+            regions.append({"kind": "recombination",
+                            "start": int(row["start_1"]), "end": int(row["end_1"])})
+            regions.append({"kind": "recombination",
+                            "start": int(row["start_2"]), "end": int(row["end_2"])})
 
     df_slippage = detection.get("df_slippage")
     if df_slippage is not None and not df_slippage.empty:
         for _, row in df_slippage.iterrows():
-            regions.append((int(row["start"]), int(row["end"])))
+            regions.append({"kind": "slippage",
+                            "start": int(row["start"]), "end": int(row["end"])})
 
     df_motifs = detection.get("df_motifs")
     if df_motifs is not None and not df_motifs.empty:
         for _, row in df_motifs.iterrows():
-            regions.append((int(row["start_index"]), int(row["end_index"]) + 1))
+            regions.append({"kind": "motifs",
+                            "start": int(row["start_index"]),
+                            "end": int(row["end_index"]) + 1})
 
-    return sorted(regions)
+    return sorted(regions, key=lambda region: (region["start"], region["end"], region["kind"]))
+
+
+def hotspot_regions_from_detection(
+    detection: typing.Mapping[str, typing.Any],
+) -> typing.List[typing.Tuple[int, int]]:
+    """The same windows as `labeled_hotspot_regions_from_detection`, reduced to
+    sorted (start, end) tuples - what `build_exclusion_regions` consumes.
+    """
+    return sorted(
+        (region["start"], region["end"])
+        for region in labeled_hotspot_regions_from_detection(detection)
+    )
 
 
 def build_exclusion_regions(

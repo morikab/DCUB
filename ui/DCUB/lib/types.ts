@@ -44,12 +44,28 @@ export interface OptimizationResult {
   hotspot_avoidance?: HotspotAvoidanceResult
 }
 
+export type HotspotKind = "recombination" | "slippage" | "motifs"
+
+/**
+ * One detected hypermutable window. 0-indexed with an EXCLUSIVE end, so
+ * `sequence_before.slice(start, end)` is exactly the hotspot.
+ *
+ * These mark what was DETECTED, not what was edited - a window too narrow to
+ * disrupt at codon resolution is reported here and deliberately left alone.
+ */
+export interface HotspotRegion {
+  kind: HotspotKind
+  start: number
+  end: number
+}
+
 export interface HotspotAvoidanceResult {
   enabled: boolean
   sequence_before: string
   sequence_after: string
   num_edits: number
   detected_sites: { recombination: number; slippage: number; motifs: number }
+  detected_regions: HotspotRegion[]
   warnings: string[]
 }
 
@@ -98,6 +114,7 @@ export interface RawOptimizationResponse {
       slippage?: number
       motifs?: number
     }
+    detected_regions?: Array<{ kind: HotspotKind; start: number; end: number }>
     warnings?: string[]
   }
 }
