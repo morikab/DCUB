@@ -31,7 +31,7 @@ const traceFile = path.join(os.tmpdir(), "electron-trace.txt");
 function trace(msg) {
   try {
     fsSync.appendFileSync(traceFile, `[${Date.now()}] ${msg}\n`);
-  } catch (_) {}
+  } catch {}
 }
 
 process.on("SIGTERM", cleanupChildProcesses);
