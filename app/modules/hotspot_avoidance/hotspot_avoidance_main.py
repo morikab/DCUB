@@ -23,6 +23,7 @@ from logger_factory.logger_factory import LoggerFactory
 from modules import models
 from modules.configuration import Configuration
 from modules.hotspot_avoidance.dcub_score_adapter import build_dcub_codon_table
+from modules.run_summary import RunSummary
 from modules.hotspot_avoidance.exclusion_regions import build_exclusion_regions
 from modules.hotspot_avoidance.exclusion_regions import hotspot_regions_from_detection
 from modules.shared_functions_and_vars import nt_to_aa
@@ -301,6 +302,7 @@ class HotspotAvoidanceModule(object):
         module_input: models.ModuleInput,
         optimization_cub_index: models.ORFOptimizationCubIndex,
         skipped_codons_num: int,
+        run_summary: RunSummary,
         compute_motifs: typing.Optional[bool] = None,
         common_motifs: typing.Optional[typing.List[str]] = None,
         recombination_mode: typing.Optional[str] = None,
@@ -311,6 +313,7 @@ class HotspotAvoidanceModule(object):
             optimization_cub_index=optimization_cub_index,
             sequence=sequence,
             skipped_codons_num=skipped_codons_num,
+            run_summary=run_summary,
         )
         return patch_sequence(
             sequence=sequence,

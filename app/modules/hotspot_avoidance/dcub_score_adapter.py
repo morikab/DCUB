@@ -18,8 +18,10 @@ from scipy.spatial.distance import pdist
 from logger_factory.logger_factory import LoggerFactory
 from modules import models
 from modules.ORF.single_codon_optimization_method import _calculate_codons_loss
+from modules.ORF.single_codon_optimization_method import orf_detailed_summary_key
 from modules.ORF.zscore_optimization_method import _calculate_zscore_for_sequence
 from modules.ORF.zscore_optimization_method import get_total_score
+from modules.run_summary import RunSummary
 from modules.shared_functions_and_vars import change_all_codons_of_aa
 from modules.shared_functions_and_vars import nt_to_aa
 from modules.shared_functions_and_vars import synonymous_codons
@@ -32,6 +34,7 @@ def build_dcub_codon_table(
     optimization_cub_index: models.ORFOptimizationCubIndex,
     sequence: str,
     skipped_codons_num: int,
+    run_summary: RunSummary,
 ) -> typing.Dict[str, typing.Dict[str, float]]:
     """Return DCUB's per-codon preferences as a higher-is-better table.
 
@@ -45,6 +48,7 @@ def build_dcub_codon_table(
         return _table_from_codon_loss(
             module_input=module_input,
             optimization_cub_index=optimization_cub_index,
+            run_summary=run_summary,
         )
 
     if optimization_method.is_single_organism_optimization:
@@ -69,20 +73,27 @@ def build_dcub_codon_table(
 def _table_from_codon_loss(
     module_input: models.ModuleInput,
     optimization_cub_index: models.ORFOptimizationCubIndex,
+    run_summary: RunSummary,
 ) -> typing.Dict[str, typing.Dict[str, float]]:
     """single_codon_* methods pick the argMIN of a loss table. Negate it so the
     same codon becomes the argMAX, matching this module's higher-is-better
     contract.
 
-    run_summary is deliberately None: ORFModule already wrote "orf_debug", and
-    RunSummary raises KeyError on a duplicate key.
+    Recorded under its own "hotspot_avoidance_detailed_<index>" key rather
+    than overwriting the ORF module's. The two tables should be identical -
+    same organisms, tuning parameter, method and CUB index - so keeping them
+    as separate entries makes any divergence between the two stages visible
+    in the run summary instead of silently replacing one with the other.
     """
     loss_table = _calculate_codons_loss(
         organisms=module_input.organisms,
         tuning_param=module_input.tuning_parameter,
         optimization_method=module_input.orf_optimization_method,
         optimization_cub_index=optimization_cub_index,
-        run_summary=None,
+        run_summary=run_summary,
+        summary_key=orf_detailed_summary_key(
+            optimization_cub_index, stage="hotspot_avoidance"
+        ),
     )
     return {
         amino_acid: {codon: -loss for codon, loss in codon_losses.items()}

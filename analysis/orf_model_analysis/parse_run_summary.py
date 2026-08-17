@@ -81,9 +81,19 @@ def compare_single_codon_method_scores() -> None:
                 columns["name"].append(Path(root).name)
                 columns["cub_index"].append(summary["module_input"]["optimization_cub_index"])
 
+                # The per-codon loss breakdown used to be one unscoped
+                # "orf_debug" entry; it is now scoped by CUB index
+                # ("orf_detailed_CAI", "orf_detailed_tAI"), because a
+                # max_CAI_tAI run writes one of each. Collect by prefix rather
+                # than reconstructing the name, so this keeps working whichever
+                # index the run used.
+                detailed_keys = sorted(key for key in summary if key.startswith("orf_detailed_"))
+                if not detailed_keys:
+                    continue
                 flattened_scores = {}
-                for dictionary in summary["orf_debug"].values():
-                    flattened_scores.update(dictionary)
+                for key in detailed_keys:
+                    for dictionary in summary[key].values():
+                        flattened_scores.update(dictionary)
 
                 for codon in nt_to_aa.keys():
                     columns[codon].append(flattened_scores[codon])

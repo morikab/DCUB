@@ -1,4 +1,5 @@
 from modules import models
+from modules.run_summary import RunSummary
 
 
 class TestEnableHotspotAvoidanceFlag:
@@ -98,6 +99,7 @@ class TestRunHotspotAvoidance:
             cds_nt_final_cai=cai,
             cds_nt_final_tai=tai,
             skipped_codons_num=0,
+            run_summary=RunSummary(),
         )
 
         assert patched_cai == cai
@@ -112,8 +114,12 @@ class TestRunHotspotAvoidance:
 
         seen = []
 
-        def fake_run_module(sequence, module_input, optimization_cub_index, skipped_codons_num):
-            seen.append((sequence, optimization_cub_index))
+        def fake_run_module(sequence, module_input, optimization_cub_index, skipped_codons_num,
+                            run_summary):
+            # run_summary is captured, not ignored: the codon-loss table the
+            # real module builds records itself under a stage-scoped key, and
+            # that only works if the caller's RunSummary actually reaches here.
+            seen.append((sequence, optimization_cub_index, run_summary))
             return HotspotPatchResult(
                 sequence_before=sequence,
                 sequence_after=sequence.replace("AAA", "AAG", 1),
@@ -136,15 +142,17 @@ class TestRunHotspotAvoidance:
         )
         cai = ["AAA" + "CCC" * 9, "AAA" + "GGG" * 9]
         tai = ["AAA" + "TTT" * 9]
+        run_summary = RunSummary()
 
         patched_cai, patched_tai, summaries = main_module.run_hotspot_avoidance(
             module_input=module_input,
             cds_nt_final_cai=cai,
             cds_nt_final_tai=tai,
             skipped_codons_num=0,
+            run_summary=run_summary,
         )
 
-        assert [sequence for sequence, _ in seen] == cai + tai, (
+        assert [sequence for sequence, _, _ in seen] == cai + tai, (
             "every candidate in both lists must be patched"
         )
         # The CAI list must be scored with codon_adaptation_index and the tAI list with
@@ -152,10 +160,13 @@ class TestRunHotspotAvoidance:
         # resolve to a "max_cai_tai_profile" attribute Organism does not have, so
         # build_dcub_codon_table's getattr would fall back to {} and hand the optimizer an
         # all-zero codon table with no error raised anywhere.
-        assert [index for _, index in seen] == (
+        assert [index for _, index, _ in seen] == (
             [models.ORFOptimizationCubIndex.codon_adaptation_index] * len(cai)
             + [models.ORFOptimizationCubIndex.trna_adaptation_index] * len(tai)
         )
+        # The caller's RunSummary must reach the module itself, not a stand-in:
+        # the codon-loss table records itself there under a stage-scoped key.
+        assert [summary for _, _, summary in seen] == [run_summary] * (len(cai) + len(tai))
         assert patched_cai == [candidate.replace("AAA", "AAG", 1) for candidate in cai]
         assert patched_tai == [candidate.replace("AAA", "AAG", 1) for candidate in tai]
         # The summary lookup is keyed by the PATCHED sequence, so the winner can
@@ -167,7 +178,8 @@ class TestRunHotspotAvoidance:
         from modules import main as main_module
         from modules.hotspot_avoidance.hotspot_avoidance_main import HotspotPatchResult
 
-        def broken_run_module(sequence, module_input, optimization_cub_index, skipped_codons_num):
+        def broken_run_module(sequence, module_input, optimization_cub_index, skipped_codons_num,
+                              run_summary):
             return HotspotPatchResult(
                 sequence_before=sequence,
                 sequence_after="ATG",  # wrong length
@@ -197,4 +209,5 @@ class TestRunHotspotAvoidance:
                 cds_nt_final_cai=["AAA" * 10],
                 cds_nt_final_tai=[],
                 skipped_codons_num=0,
+                run_summary=RunSummary(),
             )

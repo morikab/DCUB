@@ -1,7 +1,10 @@
+import copy
+
 import pytest
 
 from modules import models
 from modules.ORF.single_codon_optimization_method import _calculate_codons_loss
+from modules.ORF.single_codon_optimization_method import orf_detailed_summary_key
 from modules.run_summary import RunSummary
 
 
@@ -36,28 +39,64 @@ def two_organisms():
     ]
 
 
-def test_calculate_codons_loss_can_run_twice_without_a_run_summary(two_organisms):
-    """The adapter recomputes this table after ORFModule already wrote
-    'orf_debug' into the run summary. Passing run_summary=None must skip the
-    write rather than raising KeyError on the duplicate key."""
+def test_summary_key_is_scoped_by_cub_index():
+    """A max_CAI_tAI run calls ORFModule twice against ONE RunSummary - once
+    per index. An unscoped key made the second call collide, so max_CAI_tAI
+    plus any single_codon_* method raised KeyError before this scoping."""
+    cai = orf_detailed_summary_key(models.ORFOptimizationCubIndex.codon_adaptation_index)
+    tai = orf_detailed_summary_key(models.ORFOptimizationCubIndex.trna_adaptation_index)
+
+    assert cai == "orf_detailed_CAI"
+    assert tai == "orf_detailed_tAI"
+    assert cai != tai
+
+
+def test_summary_key_is_scoped_by_stage():
+    """Hotspot avoidance recomputes the same table. It records under its own
+    stage key so a divergence between the two stages is visible rather than
+    one silently overwriting the other."""
+    index = models.ORFOptimizationCubIndex.codon_adaptation_index
+
+    assert orf_detailed_summary_key(index) == "orf_detailed_CAI"
+    assert (orf_detailed_summary_key(index, stage="hotspot_avoidance")
+            == "hotspot_avoidance_detailed_CAI")
+
+
+def test_both_cub_indexes_coexist_in_one_run_summary(two_organisms):
+    """The regression this scoping exists for: two calls, one RunSummary,
+    different indexes. Both entries must survive."""
     run_summary = RunSummary()
     kwargs = dict(
         organisms=two_organisms,
         tuning_param=0.5,
         optimization_method=models.ORFOptimizationMethod.single_codon_diff,
-        optimization_cub_index=models.ORFOptimizationCubIndex.codon_adaptation_index,
     )
 
-    first = _calculate_codons_loss(run_summary=run_summary, **kwargs)
-    second = _calculate_codons_loss(run_summary=None, **kwargs)
+    for index in (models.ORFOptimizationCubIndex.codon_adaptation_index,
+                  models.ORFOptimizationCubIndex.trna_adaptation_index):
+        _calculate_codons_loss(
+            optimization_cub_index=index,
+            run_summary=run_summary,
+            summary_key=orf_detailed_summary_key(index),
+            **kwargs,
+        )
 
-    assert first == second
-    assert "orf_debug" in run_summary.get()
+    summary = run_summary.get()
+    assert "orf_detailed_CAI" in summary
+    assert "orf_detailed_tAI" in summary
+    # The two indexes read different profiles, so this also pins that the key
+    # scoping preserved two DISTINCT tables rather than two copies of one.
+    assert summary["orf_detailed_CAI"]["total_loss"]["C"] != {}
+    assert set(summary["orf_detailed_CAI"]) == {
+        "total_loss", "optimized_loss", "deoptimized_loss"
+    }
 
 
-def test_calculate_codons_loss_still_raises_on_a_genuine_duplicate_write(two_organisms):
-    """Passing the same run_summary twice is still a bug and must still raise -
-    run_summary=None is an opt-out, not a blanket suppression."""
+def test_repeat_write_under_one_key_is_idempotent(two_organisms):
+    """Hotspot avoidance patches each ORF candidate in turn, recomputing an
+    identical table per candidate. Writing the same key twice must overwrite
+    with the same value, not raise - the key is derived from exactly the
+    inputs that determine the value."""
     run_summary = RunSummary()
     kwargs = dict(
         organisms=two_organisms,
@@ -65,11 +104,46 @@ def test_calculate_codons_loss_still_raises_on_a_genuine_duplicate_write(two_org
         optimization_method=models.ORFOptimizationMethod.single_codon_diff,
         optimization_cub_index=models.ORFOptimizationCubIndex.codon_adaptation_index,
         run_summary=run_summary,
+        summary_key="orf_detailed_CAI",
     )
 
-    _calculate_codons_loss(**kwargs)
-    with pytest.raises(KeyError):
-        _calculate_codons_loss(**kwargs)
+    first = _calculate_codons_loss(**kwargs)
+    after_first = copy.deepcopy(run_summary.get()["orf_detailed_CAI"])
+    second = _calculate_codons_loss(**kwargs)
+
+    assert first == second
+    assert run_summary.get()["orf_detailed_CAI"] == after_first
+
+
+def test_max_cai_tai_single_codon_run_completes(two_organisms):
+    """End-to-end regression for the key collisions. run_orf_optimization
+    calls ORFModule twice for max_CAI_tAI - once per index - against one
+    RunSummary. Both the per-codon loss dump and the "orf" summary used
+    add_to_run_summary under an unscoped name, so the second call raised
+    KeyError and this combination could not run at all."""
+    from modules.main import run_orf_optimization
+
+    module_input = models.ModuleInput(
+        organisms=two_organisms,
+        sequence="ATG" + "TGT" * 20,
+        output_path="",
+        tuning_parameter=0.5,
+        clusters_count=1,
+        orf_optimization_method=models.ORFOptimizationMethod.single_codon_diff,
+        orf_optimization_cub_index=models.ORFOptimizationCubIndex.max_codon_trna_adaptation_index,
+    )
+    run_summary = RunSummary()
+
+    cai, tai = run_orf_optimization(
+        module_input=module_input, skipped_codons_num=0, run_summary=run_summary
+    )
+
+    assert len(cai) == 1 and len(tai) == 1
+    summary = run_summary.get()
+    assert {"orf_detailed_CAI", "orf_detailed_tAI"} <= set(summary)
+    # "orf" appends, so both passes are retained rather than one overwriting
+    # the other or raising.
+    assert len(summary["orf"]) == 2
 
 
 from modules.hotspot_avoidance.dcub_score_adapter import build_dcub_codon_table
@@ -100,13 +174,15 @@ class TestSingleCodonFamily:
             tuning_param=0.5,
             optimization_method=method,
             optimization_cub_index=models.ORFOptimizationCubIndex.codon_adaptation_index,
-            run_summary=None,
+            run_summary=RunSummary(),
+            summary_key="orf_detailed_CAI",
         )
         score_table = build_dcub_codon_table(
             module_input=module_input,
             optimization_cub_index=models.ORFOptimizationCubIndex.codon_adaptation_index,
             sequence=module_input.sequence,
             skipped_codons_num=0,
+            run_summary=RunSummary(),
         )
 
         # _calculate_codons_loss returns each amino acid's codon dict sorted
@@ -154,6 +230,7 @@ class TestSingleCodonFamily:
             optimization_cub_index=models.ORFOptimizationCubIndex.codon_adaptation_index,
             sequence="ATG" * 20,
             skipped_codons_num=0,
+            run_summary=RunSummary(),
         )
         for amino_acid, codons in synonymous_codons.items():
             assert set(table[amino_acid]) == set(codons)
@@ -194,6 +271,7 @@ class TestSingleOrganismFamily:
             optimization_cub_index=cub_index,
             sequence="ATG" * 20,
             skipped_codons_num=0,
+            run_summary=RunSummary(),
         )
 
         for amino_acid, expected_codon in expected.items():
@@ -259,6 +337,7 @@ class TestZscoreFamily:
             optimization_cub_index=models.ORFOptimizationCubIndex.codon_adaptation_index,
             sequence=module_input.sequence,
             skipped_codons_num=0,
+            run_summary=RunSummary(),
         )
 
         for amino_acid, codons in synonymous_codons.items():
@@ -285,6 +364,7 @@ class TestZscoreFamily:
             optimization_cub_index=cub_index,
             sequence=sequence,
             skipped_codons_num=0,
+            run_summary=RunSummary(),
         )
 
         expected_scores = {}
@@ -323,6 +403,7 @@ class TestZscoreFamily:
             optimization_cub_index=cub_index,
             sequence=sequence,
             skipped_codons_num=0,
+            run_summary=RunSummary(),
         )
 
         assert table["C"]["TGT"] > table["C"]["TGC"]

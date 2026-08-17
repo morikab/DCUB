@@ -156,9 +156,30 @@ real failure:
   is filtered out of the user-facing `warnings` list, which is reserved for
   genuine "could not clear this hotspot" reports.
 
-`_calculate_codons_loss` takes `run_summary=None` specifically so the adapter
-can recompute the loss table after `ORFModule` already wrote `"orf_debug"` -
-`RunSummary.add_to_run_summary` raises `KeyError` on a duplicate key.
+### Run-summary keys are scoped, because writers run more than once
+
+`RunSummary.add_to_run_summary` raises `KeyError` on a duplicate key, and
+`run_orf_optimization` (`main.py`) calls `ORFModule.run_module` **twice** —
+once for tAI, once for CAI — against the *same* `RunSummary` whenever the
+index is `max_codon_trna_adaptation_index`. Any unscoped key written on that
+path therefore collides on the second call. Two did, so `max_CAI_tAI` combined
+with a `single_codon_*` or `single_wanted_organism` method could not run at
+all. Both are fixed:
+
+- The per-codon loss breakdown is keyed via
+  `orf_detailed_summary_key(cub_index, stage=...)` →
+  `"orf_detailed_CAI"` / `"orf_detailed_tAI"`, with hotspot avoidance
+  recording its own recomputation under `"hotspot_avoidance_detailed_<index>"`.
+  It writes with `put_in_run_summary`: the table is a pure function of exactly
+  the inputs the key is derived from, so a repeat write is the same value by
+  construction (hotspot avoidance patches each ORF candidate in turn).
+  This key was previously the unscoped `"orf_debug"`.
+- `"orf"` uses `append_to_run_summary` in all three method families, which is
+  what the zscore methods already did. `get_orf_summary`
+  (`analysis/orf_model_analysis/generate_summary_file.py`) reads the list.
+
+Don't reintroduce an unscoped `add_to_run_summary` on this path — pass a
+`summary_key`, or append.
 
 ### Key shared types (`app/modules/models.py`)
 

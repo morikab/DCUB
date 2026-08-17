@@ -249,7 +249,12 @@ def get_orf_summary(summary: typing.Dict[str, typing.Any]) -> typing.Dict[str, t
 
     final_evaluation = summary["final_evaluation"]
     for orf_summary in summary["orf"]:
-        if orf_summary["final_sequence"] == final_evaluation["final_sequence"]:
+        # The zscore methods name their output "final_sequence"; the
+        # single_codon / single_organism methods name it "optimized_sequence".
+        # Both reach this list now that all three append rather than add
+        # (a max_CAI_tAI run writes one entry per CUB index).
+        produced = orf_summary.get("final_sequence", orf_summary.get("optimized_sequence"))
+        if produced == final_evaluation["final_sequence"]:
             return orf_summary
     raise RuntimeError(F"Did not find an orf summary for: {summary}")
 

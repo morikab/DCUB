@@ -32,7 +32,9 @@ def optimize_sequence(
                                                     tuning_param=tuning_param,
                                                     optimization_method=optimization_method,
                                                     optimization_cub_index=optimization_cub_index,
-                                                    run_summary=run_summary)
+                                                    run_summary=run_summary,
+                                                    summary_key=orf_detailed_summary_key(
+                                                        optimization_cub_index))
 
         target_protein = shared_functions_and_vars.translate(target_gene)
 
@@ -73,7 +75,11 @@ def optimize_sequence(
         "aa_to_loss_mapping": aa_to_loss_mapping,
         "run_time": timer.elapsed_time,
     }
-    run_summary.add_to_run_summary("orf", orf_summary)
+    # append_, not add_: run_orf_optimization calls this once per CUB index, so
+    # a max_CAI_tAI run reaches here twice with one RunSummary and add_ raised
+    # KeyError on the second. The zscore methods already append for exactly
+    # this reason, and get_orf_summary already handles the list shape.
+    run_summary.append_to_run_summary("orf", orf_summary)
     return optimized_sequence
 
 
@@ -269,17 +275,36 @@ def _calculate_total_loss_per_codon(optimization_method: ORFOptimizationMethod,
 
 
 # --------------------------------------------------------------
+def orf_detailed_summary_key(optimization_cub_index: models.ORFOptimizationCubIndex,
+                             stage: str = "orf") -> str:
+    """Run-summary key for a per-codon loss breakdown.
+
+    Scoped by CUB index because run_orf_optimization calls ORFModule twice -
+    once for tAI, once for CAI - against the SAME RunSummary whenever the
+    index is max_codon_trna_adaptation_index. A single unscoped key made the
+    second call collide with the first.
+
+    `stage` distinguishes which pipeline stage computed the table, so hotspot
+    avoidance recomputing it is visible as its own entry rather than
+    overwriting the ORF module's.
+    """
+    return f"{stage}_detailed_{optimization_cub_index.value}"
+
+
 def _calculate_codons_loss(organisms: typing.Sequence[models.Organism],
                            tuning_param: float,
                            optimization_method: ORFOptimizationMethod,
                            optimization_cub_index: models.ORFOptimizationCubIndex,
-                           run_summary: typing.Optional[RunSummary] = None) -> typing.Dict[str, typing.Dict[str, float]]:
+                           run_summary: RunSummary,
+                           summary_key: str) -> typing.Dict[str, typing.Dict[str, float]]:
     """
     :return: Dictionary in the format Amino Acid: Optimal codon.
 
-    `run_summary` is optional so the hotspot-avoidance adapter can recompute
-    this table after ORFModule has already written "orf_debug" - passing the
-    same RunSummary twice would raise KeyError on the duplicate key.
+    `summary_key` names the run-summary entry this call writes - build it with
+    orf_detailed_summary_key so every caller agrees on the scheme. Callers
+    must pass one explicitly rather than share a single hardcoded name: this
+    function runs from more than one pipeline stage and more than once per
+    run, and a shared name made those runs collide.
     """
     optimal_codons = {}
     codons_loss_score = {}
@@ -300,13 +325,19 @@ def _calculate_codons_loss(organisms: typing.Sequence[models.Organism],
             codon: codon_loss for codon, codon_loss in sorted(loss.items(), key=lambda item: item[1])
         }
 
-    if run_summary is not None:
-        orf_debug = {
-            "total_loss": codons_loss_score,
-            "optimized_loss": codons_loss_score_optimized,
-            "deoptimized_loss": codons_loss_score_deoptimized,
-        }
-        run_summary.add_to_run_summary("orf_debug", orf_debug)
+    orf_detailed = {
+        "total_loss": codons_loss_score,
+        "optimized_loss": codons_loss_score_optimized,
+        "deoptimized_loss": codons_loss_score_deoptimized,
+    }
+    # put_, not add_: this table is a pure function of the arguments that
+    # orf_detailed_summary_key derives its key from, so a repeat write under
+    # the same key is provably the same value (hotspot avoidance patches each
+    # ORF candidate in turn, and every candidate for one CUB index recomputes
+    # an identical table). add_to_run_summary's duplicate guard is there to
+    # catch UNRELATED data colliding on one name, which this key scheme rules
+    # out.
+    run_summary.put_in_run_summary(summary_key, orf_detailed)
     return codons_loss_score
 
 # --------------------------------------------------------------

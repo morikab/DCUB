@@ -75,6 +75,7 @@ def run_modules(user_input: models.UserInput,
                 cds_nt_final_cai=cds_nt_final_cai,
                 cds_nt_final_tai=cds_nt_final_tai,
                 skipped_codons_num=initiation_optimized_codons_num,
+                run_summary=run_summary,
             )
             hotspot_summaries.update(cluster_summaries)
             # ####################################### Evaluation ##########################################
@@ -219,6 +220,7 @@ def run_hotspot_avoidance(
         cds_nt_final_cai: typing.Sequence[str],
         cds_nt_final_tai: typing.Sequence[str],
         skipped_codons_num: int,
+        run_summary: RunSummary,
 ) -> typing.Tuple[typing.List[str], typing.List[str], typing.Dict[str, typing.Dict[str, typing.Any]]]:
     """Repair hypermutable sites in EVERY ORF-optimization candidate, before
     evaluation.
@@ -250,6 +252,7 @@ def run_hotspot_avoidance(
                 module_input=module_input,
                 optimization_cub_index=optimization_cub_index,
                 skipped_codons_num=skipped_codons_num,
+                run_summary=run_summary,
             )
             # Same validation every other module's output goes through.
             validate_module_output(
