@@ -147,6 +147,9 @@ def test_max_cai_tai_single_codon_run_completes(two_organisms):
 
 
 from modules.hotspot_avoidance.dcub_score_adapter import build_dcub_codon_table
+from modules.hotspot_avoidance.dcub_score_adapter import build_dcub_score_fn
+from modules.hotspot_avoidance.dcub_score_adapter import make_dcub_custom_score
+from modules.hotspot_avoidance.dcub_score_adapter import rare_codons
 
 
 def _module_input(organisms, optimization_method, sequence="ATG" * 20):
@@ -313,7 +316,12 @@ def _zscore_organisms():
     return organisms
 
 
-class TestZscoreFamily:
+class TestZscoreFamilyIsScoredExactly:
+    """The zscore family used to be approximated by a per-codon table built
+    from "what if EVERY codon of this amino acid became X?". DCUB's real zscore
+    optimization is positional and iterative, so that proxy measured a
+    different quantity. It is now evaluated exactly, per trial sequence."""
+
     @pytest.mark.parametrize(
         "method",
         [
@@ -323,43 +331,38 @@ class TestZscoreFamily:
             models.ORFOptimizationMethod.zscore_single_aa_diff,
         ],
     )
-    def test_table_is_complete_and_finite(self, method):
-        """Ratio methods geometric-mean the z-scores, which is undefined for
-        negative values - without the same normalization the bulk_aa optimizer
-        performs, this silently produces nan."""
-        from modules.shared_functions_and_vars import synonymous_codons
-
+    def test_score_is_finite(self, method):
+        """Ratio methods geometric-mean the z-scores, which is undefined for the
+        negative values standardization routinely produces - without fixed
+        normalization bounds this silently returns nan."""
         organisms = _zscore_organisms()
-        module_input = _module_input(organisms, method, sequence="ATGTGTTGCAAA" * 5)
-
-        table = build_dcub_codon_table(
-            module_input=module_input,
+        sequence = "ATGTGTTGCAAA" * 5
+        score_fn = build_dcub_score_fn(
+            module_input=_module_input(organisms, method, sequence=sequence),
             optimization_cub_index=models.ORFOptimizationCubIndex.codon_adaptation_index,
-            sequence=module_input.sequence,
+            sequence=sequence,
             skipped_codons_num=0,
             run_summary=RunSummary(),
         )
 
-        for amino_acid, codons in synonymous_codons.items():
-            assert set(table[amino_acid]) == set(codons)
-            for codon, score in table[amino_acid].items():
-                assert isinstance(score, float)
-                assert math.isfinite(score), f"{amino_acid}/{codon} scored {score}"
+        score = score_fn(sequence)
+        assert isinstance(score, float)
+        assert math.isfinite(score), f"{method} scored {score}"
 
-    def test_argmax_matches_the_codon_the_zscore_optimizer_would_pick(self):
-        """The table must agree with DCUB's own per-codon ranking, computed the
-        same way optimize_sequence_by_zscore_bulk_aa computes it each iteration."""
+    def test_score_matches_dcubs_own_evaluation_of_the_same_sequence(self):
+        """The decisive property of exact scoring: for any candidate, the value
+        must equal what DCUB's own zscore machinery computes for it - not an
+        approximation that merely ranks similarly."""
         from modules.ORF.zscore_optimization_method import _calculate_zscore_for_sequence
         from modules.ORF.zscore_optimization_method import get_total_score
-        from modules.shared_functions_and_vars import change_all_codons_of_aa
 
         method = models.ORFOptimizationMethod.zscore_bulk_aa_diff
-        cub_index = models.ORFOptimizationCubIndex.codon_adaptation_index
         organisms = _zscore_organisms()
         sequence = "ATGTGTTGCAAA" * 5
         module_input = _module_input(organisms, method, sequence=sequence)
+        cub_index = models.ORFOptimizationCubIndex.codon_adaptation_index
 
-        table = build_dcub_codon_table(
+        score_fn = build_dcub_score_fn(
             module_input=module_input,
             optimization_cub_index=cub_index,
             sequence=sequence,
@@ -367,43 +370,189 @@ class TestZscoreFamily:
             run_summary=RunSummary(),
         )
 
-        expected_scores = {}
-        for codon in ("TGT", "TGC"):
-            candidate = change_all_codons_of_aa(seq=sequence, selected_codon=codon, skipped_codons_num=0)
-            zscore = _calculate_zscore_for_sequence(
+        # A different candidate than the one the score fn was built around, so
+        # this cannot pass by coincidence of being the reference sequence.
+        candidate = sequence.replace("TGT", "TGC")
+        expected = get_total_score(
+            zscore=_calculate_zscore_for_sequence(
                 sequence=candidate,
                 module_input=module_input,
                 optimization_cub_index=cub_index,
                 skipped_codons_num=0,
-            )
-            expected_scores[codon] = get_total_score(
-                zscore=zscore, optimization_method=method, tuning_parameter=0.5
-            )
+            ),
+            optimization_method=method,
+            tuning_parameter=module_input.tuning_parameter,
+        )
+        assert score_fn(candidate) == pytest.approx(float(expected))
 
-        expected_best = max(expected_scores, key=expected_scores.get)
-        assert max(table["C"], key=table["C"].get) == expected_best
-
-    def test_ratio_family_ranks_the_wanted_hosts_preferred_codon_higher(self):
-        # The ratio reducer is the only one that needs the positivity
-        # normalization, so it needs its own ranking check - "doesn't produce
-        # nan" (test_table_is_complete_and_finite) is not the same as "ranks
-        # correctly". Expected order comes from how the fixture is built
-        # (wanted host prefers TGT 0.9/0.1, unwanted host prefers TGC 0.9/0.1
-        # - see _zscore_organisms), NOT from re-running the implementation's
-        # own normalize-then-get_total_score pipeline, which would be
-        # tautological and would pass against any self-consistent bug.
-        method = models.ORFOptimizationMethod.zscore_bulk_aa_ratio
-        cub_index = models.ORFOptimizationCubIndex.codon_adaptation_index
+    def test_score_discriminates_between_candidates(self):
+        """A scorer that returns the same number for every sequence would pass
+        the finiteness check above while telling the optimizer nothing."""
+        method = models.ORFOptimizationMethod.zscore_bulk_aa_diff
         organisms = _zscore_organisms()
         sequence = "ATGTGTTGCAAA" * 5
-        module_input = _module_input(organisms, method, sequence=sequence)
-
-        table = build_dcub_codon_table(
-            module_input=module_input,
-            optimization_cub_index=cub_index,
+        score_fn = build_dcub_score_fn(
+            module_input=_module_input(organisms, method, sequence=sequence),
+            optimization_cub_index=models.ORFOptimizationCubIndex.codon_adaptation_index,
             sequence=sequence,
             skipped_codons_num=0,
             run_summary=RunSummary(),
         )
 
-        assert table["C"]["TGT"] > table["C"]["TGC"]
+        # TGT is the wanted host's favourite Cys codon and the unwanted host's
+        # least favourite, so all-TGT must beat all-TGC for a diff method.
+        assert score_fn(sequence.replace("TGC", "TGT")) > score_fn(sequence.replace("TGT", "TGC"))
+
+    def test_ratio_normalization_bounds_are_fixed_across_calls(self):
+        """Bounds are derived once and held. If they moved with each trial,
+        successive scores would be incomparable - which is precisely what an
+        optimizer must be able to do."""
+        method = models.ORFOptimizationMethod.zscore_bulk_aa_ratio
+        organisms = _zscore_organisms()
+        sequence = "ATGTGTTGCAAA" * 5
+        score_fn = build_dcub_score_fn(
+            module_input=_module_input(organisms, method, sequence=sequence),
+            optimization_cub_index=models.ORFOptimizationCubIndex.codon_adaptation_index,
+            sequence=sequence,
+            skipped_codons_num=0,
+            run_summary=RunSummary(),
+        )
+
+        candidate = sequence.replace("TGT", "TGC")
+        assert score_fn(candidate) == pytest.approx(score_fn(candidate))
+        assert math.isfinite(score_fn(candidate))
+
+
+def _frequency_organisms(wanted_frequencies):
+    """Wanted/unwanted pair where TGT is the minimal-loss Cys codon but its
+    frequency in the wanted host is caller-controlled."""
+    from modules.shared_functions_and_vars import nt_to_aa
+
+    wanted_weights = {codon: 0.2 for codon in nt_to_aa}
+    unwanted_weights = {codon: 0.2 for codon in nt_to_aa}
+    wanted_weights["TGT"], wanted_weights["TGC"] = 0.9, 0.1
+    unwanted_weights["TGT"], unwanted_weights["TGC"] = 0.1, 0.9
+
+    frequencies = {codon: 0.5 for codon in nt_to_aa}
+    frequencies.update(wanted_frequencies)
+    reference = {f"gene_{index}": 0.1 * index for index in range(1, 11)}
+    return [
+        models.Organism(name="wanted", is_optimized=True, optimization_priority=50,
+                        cai_profile=dict(wanted_weights), tai_profile=dict(wanted_weights),
+                        codon_frequencies=dict(frequencies),
+                        cai_scores=dict(reference), tai_scores=dict(reference)),
+        models.Organism(name="unwanted", is_optimized=False, optimization_priority=50,
+                        cai_profile=dict(unwanted_weights), tai_profile=dict(unwanted_weights),
+                        codon_frequencies={codon: 0.5 for codon in nt_to_aa},
+                        cai_scores=dict(reference), tai_scores=dict(reference)),
+    ]
+
+
+class TestRareCodonFloor:
+    """DCUB's _get_optimal_codon skips any codon whose mean frequency in the
+    wanted hosts is below FREQUENCY_OPTIMIZATION_THRESHOLD. A plain
+    negated-loss table knows nothing about that floor, so without this the
+    optimizer could install a codon DCUB itself refused to select."""
+
+    def test_rare_codons_are_identified(self):
+        organisms = _frequency_organisms({"TGT": 0.02})
+        assert "TGT" in rare_codons(organisms)
+        assert "TGC" not in rare_codons(organisms)
+
+    def test_amino_acids_with_no_compliant_codon_are_not_penalized(self):
+        """_get_optimal_codon falls back to the minimal-loss codon when nothing
+        clears the floor. Penalizing an unavoidable codon would steer nowhere
+        and would skew scores between amino acids."""
+        organisms = _frequency_organisms({"TGT": 0.02, "TGC": 0.01})
+        penalized = rare_codons(organisms)
+        assert "TGT" not in penalized
+        assert "TGC" not in penalized
+
+    def test_penalty_flips_the_argmax_to_dcubs_own_choice(self):
+        """The regression this exists for, reproduced end to end: TGT has the
+        minimal loss but is far too rare in the wanted host, so DCUB picks TGC.
+        Without the penalty the score fn preferred TGT."""
+        from modules.ORF.single_codon_optimization_method import _get_optimal_codon
+
+        method = models.ORFOptimizationMethod.single_codon_diff
+        organisms = _frequency_organisms({"TGT": 0.02})
+        module_input = _module_input(organisms, method, sequence="ATG" + "TGT" * 10)
+        cub_index = models.ORFOptimizationCubIndex.codon_adaptation_index
+
+        loss_table = _calculate_codons_loss(
+            organisms=organisms, tuning_param=module_input.tuning_parameter,
+            optimization_method=method, optimization_cub_index=cub_index,
+            run_summary=RunSummary(), summary_key="probe",
+        )
+        dcub_choice = _get_optimal_codon(loss_table["C"].copy(), organisms)
+        assert dcub_choice == "TGC", "fixture must make DCUB reject the minimal-loss codon"
+
+        score_fn = build_dcub_score_fn(
+            module_input=module_input, optimization_cub_index=cub_index,
+            sequence=module_input.sequence, skipped_codons_num=0,
+            run_summary=RunSummary(),
+        )
+        # Score one Cys codon in isolation, the choice the optimizer faces.
+        assert score_fn("TGC") > score_fn("TGT")
+
+        unpenalized = make_dcub_custom_score(build_dcub_codon_table(
+            module_input=module_input, optimization_cub_index=cub_index,
+            sequence=module_input.sequence, skipped_codons_num=0,
+            run_summary=RunSummary(),
+        ))
+        assert unpenalized("TGT") > unpenalized("TGC"), (
+            "without the floor the raw table prefers the rare codon - this is "
+            "the divergence the penalty closes"
+        )
+
+    def test_floor_also_applies_to_the_zscore_family(self):
+        """The floor is applied on top of the score, not by editing a table, so
+        that it reaches the zscore family too - which has no table at all."""
+        method = models.ORFOptimizationMethod.zscore_bulk_aa_diff
+        organisms = _frequency_organisms({"TGT": 0.02})
+        sequence = "ATGTGTTGCAAA" * 5
+        module_input = _module_input(organisms, method, sequence=sequence)
+        cub_index = models.ORFOptimizationCubIndex.codon_adaptation_index
+
+        score_fn = build_dcub_score_fn(
+            module_input=module_input, optimization_cub_index=cub_index,
+            sequence=sequence, skipped_codons_num=0, run_summary=RunSummary(),
+        )
+        all_tgt = sequence.replace("TGC", "TGT")
+        all_tgc = sequence.replace("TGT", "TGC")
+
+        # Exactly the opposite of test_score_discriminates_between_candidates,
+        # which uses the same weights but compliant frequencies: there all-TGT
+        # wins on the zscore alone; here the floor overrides it.
+        assert score_fn(all_tgc) > score_fn(all_tgt)
+
+    def test_no_penalty_when_every_codon_clears_the_floor(self):
+        organisms = _frequency_organisms({})
+        assert rare_codons(organisms) == frozenset()
+
+        method = models.ORFOptimizationMethod.single_codon_diff
+        module_input = _module_input(organisms, method, sequence="ATG" + "TGT" * 10)
+        cub_index = models.ORFOptimizationCubIndex.codon_adaptation_index
+        table = build_dcub_codon_table(
+            module_input=module_input, optimization_cub_index=cub_index,
+            sequence=module_input.sequence, skipped_codons_num=0,
+            run_summary=RunSummary(),
+        )
+        score_fn = build_dcub_score_fn(
+            module_input=module_input, optimization_cub_index=cub_index,
+            sequence=module_input.sequence, skipped_codons_num=0,
+            run_summary=RunSummary(),
+        )
+        assert score_fn("TGT") == pytest.approx(make_dcub_custom_score(table)("TGT"))
+
+
+def test_get_optimal_codon_falls_back_instead_of_crashing():
+    """`.keys()[0]` raises TypeError on Python 3, so every amino acid whose
+    synonymous codons are ALL below the floor crashed the run rather than
+    falling back to the minimal-loss codon as the log message promises."""
+    from modules.ORF.single_codon_optimization_method import _get_optimal_codon
+
+    organisms = _frequency_organisms({"TGT": 0.02, "TGC": 0.01})
+    # Ordered ascending by loss, the order _calculate_codons_loss emits.
+    candidates = {"TGT": 0.005, "TGC": 0.725}
+    assert _get_optimal_codon(candidates, organisms) == "TGT"

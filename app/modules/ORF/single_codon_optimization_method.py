@@ -93,7 +93,14 @@ def _get_optimal_codon(candidate_optimal_codons, organisms):
             return codon
         logger.info(f"Skipping codon {codon} due to very low average frequency {average_frequency} in "
                     f"wanted hosts.")
-    most_optimal_codon = candidate_optimal_codons.keys()[0]
+    # `candidate_optimal_codons` is ordered ascending by loss (see
+    # _calculate_codons_loss), so the first key is the minimal-loss codon.
+    # This was `.keys()[0]`, which raises
+    # "TypeError: 'dict_keys' object is not subscriptable" on Python 3 - so
+    # every amino acid whose synonymous codons are ALL below
+    # FREQUENCY_OPTIMIZATION_THRESHOLD in the wanted hosts crashed the run
+    # instead of falling back as intended.
+    most_optimal_codon = next(iter(candidate_optimal_codons))
     logger.info(f"Could not find codon that satisfies minimal average frequency in wanted "
                 f"hosts. Using the codon with the minimal loss score: {most_optimal_codon}")
     return most_optimal_codon

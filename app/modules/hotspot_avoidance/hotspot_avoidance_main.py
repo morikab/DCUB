@@ -22,7 +22,9 @@ from eso.optimize import optimization_engine
 from logger_factory.logger_factory import LoggerFactory
 from modules import models
 from modules.configuration import Configuration
-from modules.hotspot_avoidance.dcub_score_adapter import build_dcub_codon_table
+from modules.hotspot_avoidance.dcub_score_adapter import build_dcub_score_fn
+# Re-exported: this used to live here, and callers/tests import it from here.
+from modules.hotspot_avoidance.dcub_score_adapter import make_dcub_custom_score  # noqa: F401
 from modules.run_summary import RunSummary
 from modules.hotspot_avoidance.exclusion_regions import build_exclusion_regions
 from modules.hotspot_avoidance.exclusion_regions import labeled_hotspot_regions_from_detection
@@ -64,30 +66,6 @@ class HotspotPatchResult:
             "detected_regions": self.detected_regions,
             "warnings": self.warnings,
         }
-
-
-def make_dcub_custom_score(
-    codon_table: typing.Mapping[str, typing.Mapping[str, float]],
-) -> typing.Callable[[str], float]:
-    """Wrap a `{amino_acid: {codon: score}}` table as the `score(seq) -> float`
-    callable ESO's CustomScore expects (higher is better).
-
-    A codon with no table entry contributes 0, matching ESO's own
-    "missing entry per codon -> 0" convention
-    (single_codon_optimization_method._get_max_organism_attribute_value).
-    """
-
-    def dcub_custom_score(sequence: str) -> float:
-        total = 0.0
-        for index in range(0, len(sequence) - (len(sequence) % 3), 3):
-            codon = sequence[index:index + 3].upper()
-            amino_acid = nt_to_aa.get(codon)
-            if amino_acid is None:
-                continue
-            total += codon_table.get(amino_acid, {}).get(codon, 0.0)
-        return total
-
-    return dcub_custom_score
 
 
 def widen_slippage_base_units(
@@ -190,8 +168,9 @@ def widen_slippage_base_units(
 
 def patch_sequence(
     sequence: str,
-    codon_table: typing.Mapping[str, typing.Mapping[str, float]],
     skipped_codons_num: int,
+    codon_table: typing.Optional[typing.Mapping[str, typing.Mapping[str, float]]] = None,
+    score_fn: typing.Optional[typing.Callable[[str], float]] = None,
     compute_motifs: typing.Optional[bool] = None,
     common_motifs: typing.Optional[typing.List[str]] = None,
     recombination_mode: typing.Optional[str] = None,
@@ -206,7 +185,17 @@ def patch_sequence(
     inside the function body, rather than as a signature default - a
     signature default is evaluated once at import time and can never be
     monkeypatched afterwards.
+
+    Supply exactly one of `codon_table` or `score_fn`. A table is the natural
+    form for the two per-codon method families; `score_fn` exists because the
+    zscore family has no per-codon decomposition - its score is a property of
+    the whole sequence - and is scored exactly instead of approximated.
     """
+    if (codon_table is None) == (score_fn is None):
+        raise ValueError("patch_sequence needs exactly one of codon_table or score_fn")
+    if score_fn is None:
+        score_fn = make_dcub_custom_score(codon_table)
+
     hotspot_config = config["HOTSPOT_AVOIDANCE"]
     if compute_motifs is None:
         compute_motifs = hotspot_config["COMPUTE_MOTIFS"]
@@ -275,7 +264,7 @@ def patch_sequence(
                 # that means nothing to the user. Disable it outright.
                 mini_gc=0.0,
                 maxi_gc=1.0,
-                custom_score_fn=make_dcub_custom_score(codon_table),
+                custom_score_fn=score_fn,
                 custom_score_minimize=False,
                 df_recombination=detection.get("df_recombination"),
                 df_slippage=df_slippage,
@@ -320,7 +309,7 @@ class HotspotAvoidanceModule(object):
         recombination_mode: typing.Optional[str] = None,
         slippage_mode: typing.Optional[str] = None,
     ) -> HotspotPatchResult:
-        codon_table = build_dcub_codon_table(
+        score_fn = build_dcub_score_fn(
             module_input=module_input,
             optimization_cub_index=optimization_cub_index,
             sequence=sequence,
@@ -329,7 +318,7 @@ class HotspotAvoidanceModule(object):
         )
         return patch_sequence(
             sequence=sequence,
-            codon_table=codon_table,
+            score_fn=score_fn,
             skipped_codons_num=skipped_codons_num,
             compute_motifs=compute_motifs,
             common_motifs=common_motifs,

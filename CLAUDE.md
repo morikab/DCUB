@@ -122,12 +122,36 @@ sequence that isn't what ships.
   disrupt at codon resolution appears here and is deliberately left alone,
   which is exactly the case the panel needs in order to explain a 0-edit run
   that still found sites.
-- `dcub_score_adapter.py` - `build_dcub_codon_table` normalizes DCUB's
-  per-codon preferences to **higher is better** for all three method families
-  (`single_codon_*` negates a loss table; `single_wanted_organism` reads the
-  wanted organism's CUB profile; `zscore_*` re-runs DCUB's own per-codon
-  scoring against the final candidate). Callers never need to know which
-  family produced the table.
+- `dcub_score_adapter.py` - `build_dcub_score_fn` is the entry point: DCUB's
+  preference model as the `score(seq) -> float` callable ESO's `CustomScore`
+  wants, **higher is better**, for any optimization method.
+  - `single_codon_*` (negated loss table) and `single_wanted_organism` (the
+    wanted organism's CUB profile) decompose per codon, so they go through
+    `build_dcub_codon_table` + `make_dcub_custom_score`.
+  - `zscore_*` does **not** decompose - its score is a property of the whole
+    sequence - and is evaluated **exactly**, per trial sequence, by
+    `_exact_zscore_score_fn`. It previously used a per-codon proxy table built
+    from "what if every codon of this amino acid became X?", which measured a
+    structurally different quantity from DCUB's positional, iterative zscore
+    optimization. Exact evaluation is affordable *because* of the locality
+    lock: only hotspot codons are editable, so few trials run. Measured at
+    0.383 ms/call on a 711nt gene, against 64 such calls that the discarded
+    proxy table spent building itself. The ratio family still needs the sweep
+    once, for fixed normalization bounds - a geometric mean is undefined for
+    negative z-scores, and bounds that moved per trial would make successive
+    scores incomparable.
+  - **The rare-codon floor applies to all of them.** DCUB's own
+    `_get_optimal_codon` skips any codon whose mean frequency across the wanted
+    hosts is below `config["ORF"]["FREQUENCY_OPTIMIZATION_THRESHOLD"]`. That
+    floor is invisible to a negated-loss table, so the optimizer could install a
+    codon DCUB itself refused (verified: Cys weighted so `TGT` has the minimal
+    loss but 0.02 mean frequency - DCUB picks `TGC`, the raw table picks `TGT`).
+    `apply_rare_codon_penalty` subtracts `RARE_CODON_PENALTY` per offending
+    codon *on the score* rather than editing a table, so it reaches the zscore
+    family too. Amino acids whose every codon is below the floor are exempt,
+    mirroring `_get_optimal_codon`'s own fallback. The penalty can never block a
+    repair: DNAChisel objectives are soft and `resolve_constraints()` runs
+    first, so it only decides which legal codon is used.
 - `hotspot_avoidance_main.py` - detection plus the `eso.optimize.optimization_engine`
   call. Reads `config["HOTSPOT_AVOIDANCE"]` (module-scope `config =
   Configuration.get_config()`, matching `orf_main.py`'s pattern) **inside**
