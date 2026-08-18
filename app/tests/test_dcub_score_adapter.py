@@ -681,21 +681,23 @@ def test_get_optimal_codon_falls_back_instead_of_crashing():
     assert _get_optimal_codon(candidates, organisms) == "TGT"
 
 
-def test_repair_picks_dcubs_optimal_codon_inside_the_window():
-    """The point of the whole adapter, end to end: a forced substitution inside
-    a hotspot should land on the codon DCUB itself would choose, not merely on
-    one that breaks the repeat.
+PLANTED_PREFIX = "ATGCCACAACACGCACGCAGCTACAACGTG"
+PLANTED_SUFFIX = "CAAGTCTCACTAGTGAGTGACTTCGGTAAT"
+#: PLANTED_PREFIX ends in G and PLANTED_SUFFIX starts with C, so the detector
+#: reports the repeat as seq[29:37] == "GCGCGCGC", not just the planted 6nt.
+#: The codon-widened editable window is therefore [27, 39) - four codons, only
+#: two of which are the planted ones.
+REPEAT_SEQUENCE = PLANTED_PREFIX + "CGCGCG" + PLANTED_SUFFIX
 
-    This only became reliable once the loss table was mapped onto CAI-style
-    weights and scored with general_geomean - the same routine and the same
-    scale the other two families and EvaluationModule use.
+
+def _repair_with_weights(wanted_weights):
+    """Repair REPEAT_SEQUENCE under a given wanted-organism profile.
+
+    Returns (result, weights, editable_window). The unwanted organism is flat,
+    so the loss ranking follows the wanted profile directly.
     """
     from modules.hotspot_avoidance.hotspot_avoidance_main import HotspotAvoidanceModule
-    from modules.shared_functions_and_vars import nt_to_aa, translate
-
-    prefix = "ATGCCACAACACGCACGCAGCTACAACGTG"
-    suffix = "CAAGTCTCACTAGTGAGTGACTTCGGTAAT"
-    sequence = prefix + "CGCGCG" + suffix
+    from modules.shared_functions_and_vars import nt_to_aa
 
     reference = {f"gene_{index}": 0.1 * index for index in range(1, 11)}
 
@@ -709,14 +711,12 @@ def test_repair_picks_dcubs_optimal_codon_inside_the_window():
             cai_scores=dict(reference), tai_scores=dict(reference),
         )
 
-    # Arg and Ala get a real wanted/unwanted split, so DCUB has a strict
-    # preference at both codons of the repeat rather than an arbitrary tie.
     module_input = models.ModuleInput(
         organisms=[
-            organism("wanted", True, {"CGT": 0.95, "CGC": 0.05, "GCA": 0.9, "GCG": 0.05}),
-            organism("unwanted", False, {"CGT": 0.05, "CGC": 0.95, "GCA": 0.05, "GCG": 0.9}),
+            organism("wanted", True, wanted_weights),
+            organism("unwanted", False, {codon: 0.5 for codon in wanted_weights}),
         ],
-        sequence=sequence, output_path="", tuning_parameter=0.5, clusters_count=1,
+        sequence=REPEAT_SEQUENCE, output_path="", tuning_parameter=0.5, clusters_count=1,
         orf_optimization_method=models.ORFOptimizationMethod.single_codon_diff,
         orf_optimization_cub_index=models.ORFOptimizationCubIndex.codon_adaptation_index,
     )
@@ -724,23 +724,108 @@ def test_repair_picks_dcubs_optimal_codon_inside_the_window():
 
     weights = build_dcub_codon_table(
         module_input=module_input, optimization_cub_index=cub_index,
-        sequence=sequence, skipped_codons_num=0, run_summary=RunSummary(),
+        sequence=REPEAT_SEQUENCE, skipped_codons_num=0, run_summary=RunSummary(),
     )
     result = HotspotAvoidanceModule.run_module(
-        sequence=sequence, module_input=module_input,
+        sequence=REPEAT_SEQUENCE, module_input=module_input,
         optimization_cub_index=cub_index, skipped_codons_num=0,
         run_summary=RunSummary(),
     )
+    region = result.detected_regions[0]
+    window = range((region["start"] // 3) * 3, -(-region["end"] // 3) * 3, 3)
+    return result, weights, window
 
-    assert translate(sequence) == translate(result.sequence_after)
-    assert result.sequence_after[30:36] != "CGCGCG", "the repeat must be broken"
 
+def _codon_cost(weights, sequence_before, sequence_after, start):
+    from modules.shared_functions_and_vars import nt_to_aa
+
+    before = sequence_before[start:start + 3]
+    after = sequence_after[start:start + 3]
+    amino_acid = nt_to_aa[before]
+    return before, after, weights[amino_acid][before] - weights[amino_acid][after]
+
+
+def test_repair_prefers_a_free_break_over_sacrificing_a_preferred_codon():
+    """The realistic shape: the repeat is made of codons DCUB ALREADY chose, so
+    repair has to give something up - and it should give up the cheapest thing
+    in the window, not necessarily a codon of the repeat itself.
+
+    Here Valine's synonymous codons are all tied, so breaking the repeat at the
+    Val codon costs nothing, while touching the Arg or Ala of the repeat would
+    cost 0.031 / 0.040.
+    """
+    from modules.shared_functions_and_vars import nt_to_aa, translate
+
+    result, weights, window = _repair_with_weights({
+        "CGC": 0.95, "CGT": 0.80, "CGA": 0.40, "CGG": 0.30, "AGA": 0.20, "AGG": 0.10,
+        "GCG": 0.95, "GCA": 0.80, "GCC": 0.40, "GCT": 0.20,
+    })
+
+    assert translate(REPEAT_SEQUENCE) == translate(result.sequence_after)
+    assert "GCGCGCGC" not in result.sequence_after, "the repeat must be broken"
+
+    # Both codons of the planted repeat are DCUB's optimum and must survive.
     for start in (30, 33):
-        original = sequence[start:start + 3]
-        chosen = result.sequence_after[start:start + 3]
-        amino_acid = nt_to_aa[original]
-        optimum = max(weights[amino_acid], key=weights[amino_acid].get)
-        assert weights[amino_acid][optimum] == pytest.approx(1.0)
-        assert chosen == optimum, (
-            f"{amino_acid} at {start}: chose {chosen}, DCUB's optimum is {optimum}"
+        before, after, _ = _codon_cost(weights, REPEAT_SEQUENCE, result.sequence_after, start)
+        amino_acid = nt_to_aa[before]
+        assert weights[amino_acid][before] == pytest.approx(1.0)
+        assert after == before, f"gave up a preferred codon at {start}"
+
+    # Whatever did change cost nothing.
+    total_cost = sum(
+        _codon_cost(weights, REPEAT_SEQUENCE, result.sequence_after, start)[2]
+        for start in window
+    )
+    assert total_cost == pytest.approx(0.0)
+
+
+def test_when_no_free_break_exists_repair_gives_up_the_least_it_can():
+    """Every codon in the window now has a strict preference, so the repeat
+    cannot be broken for free. The concession must be the cheapest available:
+    Arg's runner-up costs 0.031, Ala's 0.040, and Val's and Gln's 0.990.
+    """
+    from modules.shared_functions_and_vars import nt_to_aa, translate
+
+    result, weights, window = _repair_with_weights({
+        "CGC": 0.95, "CGT": 0.80, "CGA": 0.40, "CGG": 0.30, "AGA": 0.20, "AGG": 0.10,
+        "GCG": 0.95, "GCA": 0.80, "GCC": 0.40, "GCT": 0.20,
+        "GTG": 0.95, "GTA": 0.05, "GTC": 0.05, "GTT": 0.05,
+        "CAA": 0.95, "CAG": 0.05,
+    })
+
+    assert translate(REPEAT_SEQUENCE) == translate(result.sequence_after)
+    assert "GCGCGCGC" not in result.sequence_after, "the repeat must be broken"
+
+    changed = [
+        start for start in window
+        if REPEAT_SEQUENCE[start:start + 3] != result.sequence_after[start:start + 3]
+    ]
+    assert len(changed) == 1, f"expected one concession, got {changed}"
+
+    start = changed[0]
+    before, after, cost = _codon_cost(weights, REPEAT_SEQUENCE, result.sequence_after, start)
+    amino_acid = nt_to_aa[before]
+
+    # The runner-up of that amino acid, not an arbitrary or worst alternative.
+    runner_up = max(
+        (codon for codon in weights[amino_acid] if codon != before),
+        key=weights[amino_acid].get,
+    )
+    assert after == runner_up, f"{amino_acid}: chose {after}, runner-up is {runner_up}"
+
+    # And that amino acid is the one whose runner-up is cheapest of the window.
+    cheapest = min(
+        weights[nt_to_aa[REPEAT_SEQUENCE[other:other + 3]]][REPEAT_SEQUENCE[other:other + 3]]
+        - max(
+            (
+                weight for codon, weight
+                in weights[nt_to_aa[REPEAT_SEQUENCE[other:other + 3]]].items()
+                if codon != REPEAT_SEQUENCE[other:other + 3]
+            ),
+            default=0.0,
         )
+        for other in window
+    )
+    assert cost == pytest.approx(cheapest), (
+        f"gave up {cost:.3f} at {amino_acid} when {cheapest:.3f} was available"
+    )

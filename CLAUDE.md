@@ -155,9 +155,21 @@ sequence that isn't what ships.
     Amino acids whose codons all tie get a flat 1.0 - spreading them over the
     range would invent a preference DCUB does not have.
 
-    Measured effect: with a real wanted/unwanted split, repairing `CGCGCG`
-    yields `CGTGCA` - both codons DCUB's optimum at weight 1.000, rather than
-    merely something that breaks the repeat.
+    Measured effect, on the realistic input - a repeat made of codons DCUB
+    ALREADY chose, which is what hotspot avoidance actually receives, since it
+    runs on an already-optimized candidate. Repair has to give something up,
+    and it gives up the cheapest thing in the **codon-widened detected window**,
+    which is usually wider than the repeat itself:
+    - when a codon in the window has tied synonyms, it breaks the repeat there
+      for zero cost and leaves the preferred codons of the repeat intact;
+    - when every codon has a strict preference, it takes the single cheapest
+      concession available (Arg 1.000 -> 0.969, over Ala's 0.040 and Val's
+      0.990) and moves to that amino acid's RUNNER-UP, not an arbitrary
+      alternative.
+
+    Do not "verify" this by planting deliberately bad codons and checking the
+    optimum is chosen - that is near-tautological, and it misses the behaviour
+    that matters.
   - `zscore_*` does **not** decompose - its score is a property of the whole
     sequence - and is evaluated **exactly**, per trial sequence, by
     `_exact_zscore_score_fn`. It previously used a per-codon proxy table built
