@@ -1,4 +1,5 @@
 import copy
+import math
 
 import pytest
 
@@ -147,6 +148,7 @@ def test_max_cai_tai_single_codon_run_completes(two_organisms):
     assert len(summary["orf"]) == 2
 
 
+from modules.hotspot_avoidance.dcub_score_adapter import DCUB_WEIGHT_FLOOR
 from modules.hotspot_avoidance.dcub_score_adapter import build_dcub_codon_table
 from modules.hotspot_avoidance.dcub_score_adapter import build_dcub_score_fn
 from modules.hotspot_avoidance.dcub_score_adapter import make_dcub_custom_score
@@ -166,65 +168,101 @@ def _module_input(organisms, optimization_method, sequence="ATG" * 20):
 
 
 class TestSingleCodonFamily:
-    def test_table_is_higher_is_better_and_argmax_matches_dcubs_own_choice(self, two_organisms):
-        """DCUB's native table is a LOSS (lower is better) and its chosen codon
-        is the argMIN. The adapter negates it, so the same codon must be the
-        argMAX here - this is the property every downstream caller relies on."""
-        method = models.ORFOptimizationMethod.single_codon_diff
-        module_input = _module_input(two_organisms, method)
+    """DCUB's native table is a LOSS (lower is better) and its chosen codon is
+    the argMIN. loss_table_to_weights maps it onto CAI-style weights in (0, 1]
+    with that codon at 1.0, so the same codon is the argMAX and the result can
+    be scored by general_geomean like every other family. A plain negation
+    cannot: losses are sums of squares, so negating gives values <= 0 and a
+    geometric mean of those is nan."""
 
+    def _loss_and_weights(self, organisms):
+        method = models.ORFOptimizationMethod.single_codon_diff
+        cub_index = models.ORFOptimizationCubIndex.codon_adaptation_index
         loss_table = _calculate_codons_loss(
-            organisms=two_organisms,
+            organisms=organisms,
             tuning_param=0.5,
             optimization_method=method,
-            optimization_cub_index=models.ORFOptimizationCubIndex.codon_adaptation_index,
+            optimization_cub_index=cub_index,
             run_summary=RunSummary(),
             summary_key="orf_detailed_CAI",
         )
-        score_table = build_dcub_codon_table(
-            module_input=module_input,
-            optimization_cub_index=models.ORFOptimizationCubIndex.codon_adaptation_index,
-            sequence=module_input.sequence,
+        weights = build_dcub_codon_table(
+            module_input=_module_input(organisms, method),
+            optimization_cub_index=cub_index,
+            sequence="ATG" * 20,
             skipped_codons_num=0,
             run_summary=RunSummary(),
         )
+        return loss_table, weights
 
-        # _calculate_codons_loss returns each amino acid's codon dict sorted
-        # ascending by loss, and _table_from_codon_loss's comprehension
-        # preserves that key order while only negating the values. That
-        # means min(codon_losses, ...) and max(score_table[aa], ...) would
-        # both just return the dict's *first key* regardless of the actual
-        # values - this test would pass even against an all-zeros score
-        # table. Assert the values themselves first, so a degenerate table
-        # cannot slip through silently:
-        for amino_acid, codon_losses in loss_table.items():
-            for codon, loss in codon_losses.items():
-                assert score_table[amino_acid][codon] == pytest.approx(-loss)
+    def test_weights_are_strictly_inside_zero_and_one(self, two_organisms):
+        """Strictly positive matters: general_geomean SILENTLY DROPS a codon
+        whose weight is exactly 0 - it evaluates `ValueError()` without raising
+        and appends nothing - so a zero would shorten the sequence rather than
+        penalize it, and a geometric mean containing a zero is zero anyway."""
+        _, weights = self._loss_and_weights(two_organisms)
 
-        # Then restate the same claim in "argmax" vocabulary, the way the
-        # docstring promises it. NOTE: this fixture ties the loss for most
-        # amino acids - every codon but Cysteine's TGT/TGC is weighted
-        # identically at 0.2 for both organisms - so min(codon_losses, ...)
-        # is itself picking an arbitrary one of several equal-loss codons.
-        # Re-sorting the score dict into alphabetical key order and taking a
-        # second, independent max() (rather than checking whether the
-        # loss table's own choice attains the maximum score) makes that
-        # arbitrary tie-pick disagree purely on key-order grounds - verified
-        # empirically: 18 of this fixture's 21 amino acids have a genuinely
-        # tied minimum loss, and re-ordering flips the "winner" for all 18.
-        # Checking that best_by_loss *attains* the max score - rather than
-        # requiring it be THE unique argmax after an arbitrary reorder - is
-        # the tie-safe version of the same check. It is also implied by the
-        # per-value equality loop above (once every score is exactly -loss,
-        # the argmin-of-loss trivially attains the max-of-score); it's kept
-        # here for readability, matching the docstring's own vocabulary, not
-        # as independent protection - the value-by-value loop above is what
-        # defeats a degenerate/all-zeros table.
+        for amino_acid, codon_weights in weights.items():
+            for codon, weight in codon_weights.items():
+                assert 0.0 < weight <= 1.0, f"{amino_acid}/{codon} = {weight}"
+
+    def test_the_codon_dcub_would_choose_scores_exactly_one(self, two_organisms):
+        """Normalized per amino acid, matching the CAI/tAI convention
+        general_geomean is used with everywhere else, so a fully DCUB-optimal
+        ORF scores 1.0 regardless of which amino acids it contains."""
+        loss_table, weights = self._loss_and_weights(two_organisms)
+
         for amino_acid, codon_losses in loss_table.items():
             best_by_loss = min(codon_losses, key=codon_losses.get)
-            assert score_table[amino_acid][best_by_loss] == pytest.approx(
-                max(score_table[amino_acid].values())
-            ), f"disagreement for {amino_acid}"
+            assert weights[amino_acid][best_by_loss] == pytest.approx(1.0), amino_acid
+
+    def test_ordering_is_preserved_exactly(self, two_organisms):
+        """The mapping only decides how much worse the alternatives are; it must
+        never reorder them. Checked against the loss VALUES, not against dict
+        order - _calculate_codons_loss returns each amino acid already sorted
+        ascending by loss, so an order-only check would pass against a
+        degenerate all-equal table."""
+        loss_table, weights = self._loss_and_weights(two_organisms)
+
+        for amino_acid, codon_losses in loss_table.items():
+            for first, first_loss in codon_losses.items():
+                for second, second_loss in codon_losses.items():
+                    if first_loss < second_loss:
+                        assert weights[amino_acid][first] > weights[amino_acid][second]
+                    elif first_loss == second_loss:
+                        assert weights[amino_acid][first] == pytest.approx(
+                            weights[amino_acid][second]
+                        )
+
+    def test_worst_codon_lands_on_the_floor(self, two_organisms):
+        _, weights = self._loss_and_weights(two_organisms)
+        # Cysteine is the one amino acid this fixture gives a real spread.
+        assert min(weights["C"].values()) == pytest.approx(DCUB_WEIGHT_FLOOR)
+        assert max(weights["C"].values()) == pytest.approx(1.0)
+
+    def test_all_tied_amino_acids_get_a_flat_one(self, two_organisms):
+        """Spreading tied codons over the range would invent a preference DCUB
+        does not have. This fixture ties every amino acid but Cysteine."""
+        loss_table, weights = self._loss_and_weights(two_organisms)
+
+        for amino_acid, codon_losses in loss_table.items():
+            if len(set(codon_losses.values())) == 1:
+                assert set(weights[amino_acid].values()) == {1.0}, amino_acid
+
+    def test_a_negated_loss_table_would_be_unusable_here(self, two_organisms):
+        """Pins WHY the normalization exists rather than a plain negation."""
+        import warnings
+
+        from scipy.stats.mstats import gmean
+
+        loss_table, _ = self._loss_and_weights(two_organisms)
+        negated = [-loss for loss in loss_table["C"].values()]
+
+        assert all(value <= 0 for value in negated)
+        with warnings.catch_warnings():
+            # gmean takes log() of its inputs; negatives are exactly the point.
+            warnings.simplefilter('ignore', RuntimeWarning)
+            assert math.isnan(float(gmean(negated)))
 
     def test_every_codon_of_every_amino_acid_is_present(self, two_organisms):
         from modules.shared_functions_and_vars import synonymous_codons
@@ -641,3 +679,68 @@ def test_get_optimal_codon_falls_back_instead_of_crashing():
     # Ordered ascending by loss, the order _calculate_codons_loss emits.
     candidates = {"TGT": 0.005, "TGC": 0.725}
     assert _get_optimal_codon(candidates, organisms) == "TGT"
+
+
+def test_repair_picks_dcubs_optimal_codon_inside_the_window():
+    """The point of the whole adapter, end to end: a forced substitution inside
+    a hotspot should land on the codon DCUB itself would choose, not merely on
+    one that breaks the repeat.
+
+    This only became reliable once the loss table was mapped onto CAI-style
+    weights and scored with general_geomean - the same routine and the same
+    scale the other two families and EvaluationModule use.
+    """
+    from modules.hotspot_avoidance.hotspot_avoidance_main import HotspotAvoidanceModule
+    from modules.shared_functions_and_vars import nt_to_aa, translate
+
+    prefix = "ATGCCACAACACGCACGCAGCTACAACGTG"
+    suffix = "CAAGTCTCACTAGTGAGTGACTTCGGTAAT"
+    sequence = prefix + "CGCGCG" + suffix
+
+    reference = {f"gene_{index}": 0.1 * index for index in range(1, 11)}
+
+    def organism(name, is_optimized, tweak):
+        weights = {codon: 0.2 for codon in nt_to_aa}
+        weights.update(tweak)
+        return models.Organism(
+            name=name, is_optimized=is_optimized, optimization_priority=50,
+            cai_profile=dict(weights), tai_profile=dict(weights),
+            codon_frequencies={codon: 0.5 for codon in weights},
+            cai_scores=dict(reference), tai_scores=dict(reference),
+        )
+
+    # Arg and Ala get a real wanted/unwanted split, so DCUB has a strict
+    # preference at both codons of the repeat rather than an arbitrary tie.
+    module_input = models.ModuleInput(
+        organisms=[
+            organism("wanted", True, {"CGT": 0.95, "CGC": 0.05, "GCA": 0.9, "GCG": 0.05}),
+            organism("unwanted", False, {"CGT": 0.05, "CGC": 0.95, "GCA": 0.05, "GCG": 0.9}),
+        ],
+        sequence=sequence, output_path="", tuning_parameter=0.5, clusters_count=1,
+        orf_optimization_method=models.ORFOptimizationMethod.single_codon_diff,
+        orf_optimization_cub_index=models.ORFOptimizationCubIndex.codon_adaptation_index,
+    )
+    cub_index = models.ORFOptimizationCubIndex.codon_adaptation_index
+
+    weights = build_dcub_codon_table(
+        module_input=module_input, optimization_cub_index=cub_index,
+        sequence=sequence, skipped_codons_num=0, run_summary=RunSummary(),
+    )
+    result = HotspotAvoidanceModule.run_module(
+        sequence=sequence, module_input=module_input,
+        optimization_cub_index=cub_index, skipped_codons_num=0,
+        run_summary=RunSummary(),
+    )
+
+    assert translate(sequence) == translate(result.sequence_after)
+    assert result.sequence_after[30:36] != "CGCGCG", "the repeat must be broken"
+
+    for start in (30, 33):
+        original = sequence[start:start + 3]
+        chosen = result.sequence_after[start:start + 3]
+        amino_acid = nt_to_aa[original]
+        optimum = max(weights[amino_acid], key=weights[amino_acid].get)
+        assert weights[amino_acid][optimum] == pytest.approx(1.0)
+        assert chosen == optimum, (
+            f"{amino_acid} at {start}: chose {chosen}, DCUB's optimum is {optimum}"
+        )

@@ -1,3 +1,5 @@
+import math
+
 import pandas as pd
 import pytest
 
@@ -5,6 +7,7 @@ from modules.hotspot_avoidance.hotspot_avoidance_main import HotspotPatchResult
 from modules.hotspot_avoidance.hotspot_avoidance_main import make_dcub_custom_score
 from modules.hotspot_avoidance.hotspot_avoidance_main import patch_sequence
 from modules.hotspot_avoidance.hotspot_avoidance_main import widen_slippage_base_units
+from modules.shared_functions_and_vars import nt_to_aa
 from modules.shared_functions_and_vars import synonymous_codons
 from modules.shared_functions_and_vars import translate
 
@@ -48,12 +51,35 @@ def _flat_codon_table(preferred=()):
 
 
 class TestMakeDcubCustomScore:
-    def test_sums_per_codon_table_lookups(self):
-        score = make_dcub_custom_score(_flat_codon_table(preferred=["TGT"]))
-        # TGT (2.0) + AAA (1.0) + ATG (1.0)
-        assert score("TGTAAAATG") == pytest.approx(4.0)
+    """Scores with general_geomean - DCUB's canonical routine - not by summing
+    the table. Weights are the CAI-style (0, 1] scale loss_table_to_weights
+    produces, on which a fully DCUB-optimal ORF scores 1.0."""
 
-    def test_unknown_codon_contributes_zero(self):
+    def test_scores_the_geometric_mean_of_codon_weights(self):
+        score = make_dcub_custom_score(_flat_codon_table(preferred=["TGT"]))
+        # TGT (2.0) and AAA (1.0); ATG is non-synonymous, so general_geomean
+        # skips it - there is no codon choice at a Met to optimize.
+        assert score("TGTAAAATG") == pytest.approx(math.sqrt(2.0))
+
+    def test_a_single_bad_codon_costs_more_than_it_would_by_summing(self):
+        """The reason for the geometric mean: it is multiplicative, so one very
+        poor codon drags the whole window down instead of being averaged away by
+        its neighbours. This is also how EvaluationModule scores."""
+        table = _flat_codon_table()
+        table[nt_to_aa["TGT"]]["TGT"] = 0.01
+
+        score = make_dcub_custom_score(table)
+        all_good = score("AAAGATTTT")
+        one_bad = score("TGTGATTTT")
+
+        assert one_bad < all_good
+        # gmean(0.01, 1, 1) = 0.01^(1/3) ~ 0.215, i.e. a ~78% drop from one
+        # codon out of three. A sum would have dropped only 33%.
+        assert one_bad == pytest.approx((0.01 * 1.0 * 1.0) ** (1 / 3))
+
+    def test_unknown_codon_falls_back_to_the_mean_weight(self):
+        """general_geomean substitutes the profile's mean rather than dropping
+        the codon or scoring it zero - a zero would zero the whole sequence."""
         score = make_dcub_custom_score(_flat_codon_table())
         assert score("NNNAAA") == pytest.approx(1.0)
 
@@ -61,9 +87,12 @@ class TestMakeDcubCustomScore:
         score = make_dcub_custom_score(_flat_codon_table())
         assert score("AAAAA") == pytest.approx(1.0)
 
-    def test_empty_sequence_scores_zero(self):
+    def test_too_short_to_hold_a_codon_scores_zero(self):
+        """gmean of an empty list is nan, which would poison DNAChisel's
+        objective comparison. ESO can hand in a slice shorter than a codon."""
         score = make_dcub_custom_score(_flat_codon_table())
         assert score("") == pytest.approx(0.0)
+        assert score("AT") == pytest.approx(0.0)
 
 
 class TestWidenSlippageBaseUnits:

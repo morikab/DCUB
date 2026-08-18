@@ -134,13 +134,30 @@ sequence that isn't what ships.
     for a codon the profile omits (a hand-built table defaulted those to 0.0,
     which in a geometric mean zeroes the whole score) and skips Met/Trp/stop,
     which have no choice to optimize.
-  - `single_codon_*` is the one family with no canonical whole-sequence scorer,
-    because DCUB never computes one for it - the method picks per-amino-acid
-    argmin of a loss table combining wanted and unwanted organisms. That table
-    is negated to higher-is-better and summed by `make_dcub_custom_score`.
-    `general_geomean` is not an option here: negated losses are <= 0 and its
-    geometric mean returns `nan`. This is the only place a per-codon table
-    still exists, and `build_dcub_codon_table` now serves only it.
+  - `single_codon_*` picks per-amino-acid argmin of a loss table combining
+    wanted and unwanted organisms, so it has no CUB profile to score against
+    directly. `loss_table_to_weights` maps that loss onto **CAI-style weights in
+    (0, 1], normalized per amino acid so the codon DCUB would choose scores
+    exactly 1.0**, and `make_dcub_custom_score` then scores with the same
+    `general_geomean`. All three families therefore share one aggregation and
+    one scale, on which a fully DCUB-optimal ORF scores 1.0.
+
+    A plain negation cannot be used: losses are sums of squares, so negating
+    gives values <= 0 and `gmean` returns `nan`. The floor
+    (`DCUB_WEIGHT_FLOOR`) is strictly positive because `general_geomean`
+    silently DROPS a codon whose weight is exactly 0 - it evaluates
+    `ValueError()` without raising, then appends nothing - so a zero would
+    shorten the sequence instead of penalizing it.
+
+    Normalized per amino acid, not globally, matching the CAI/tAI convention
+    (`RSCU / max(RSCU of that synonymous family)`); a global normalization would
+    make the achievable maximum depend on which amino acids the gene contains.
+    Amino acids whose codons all tie get a flat 1.0 - spreading them over the
+    range would invent a preference DCUB does not have.
+
+    Measured effect: with a real wanted/unwanted split, repairing `CGCGCG`
+    yields `CGTGCA` - both codons DCUB's optimum at weight 1.000, rather than
+    merely something that breaks the repeat.
   - `zscore_*` does **not** decompose - its score is a property of the whole
     sequence - and is evaluated **exactly**, per trial sequence, by
     `_exact_zscore_score_fn`. It previously used a per-codon proxy table built

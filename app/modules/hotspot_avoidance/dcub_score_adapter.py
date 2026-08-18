@@ -41,6 +41,74 @@ config = Configuration.get_config()
 #: gets used.
 RARE_CODON_PENALTY = 1.0e6
 
+#: Weight given to the WORST synonymous codon of an amino acid when a loss
+#: table is mapped onto CAI-style weights. Strictly positive for two reasons:
+#: a geometric mean of a zero is zero, and general_geomean silently DROPS a
+#: codon whose weight is exactly 0 (it evaluates `ValueError()` without
+#: raising, then appends nothing), so a zero weight would quietly shorten the
+#: sequence rather than penalize it. 0.01 sits at the low end of the range real
+#: CAI weights occupy, so a maximally deoptimized codon costs about what a
+#: genuinely rare one does.
+DCUB_WEIGHT_FLOOR = 0.01
+
+
+def loss_table_to_weights(
+    loss_table: typing.Mapping[str, typing.Mapping[str, float]],
+) -> typing.Dict[str, typing.Dict[str, float]]:
+    """Map DCUB's per-amino-acid LOSS table onto CAI-style weights in
+    (0, 1], normalized per amino acid so the codon DCUB would choose scores
+    exactly 1.0.
+
+    This is what lets the single_codon_* family be scored by the same
+    `general_geomean` the other two families use. A negated loss cannot be:
+    losses are sums of squares, so negating them gives values <= 0 and a
+    geometric mean of those is nan.
+
+    Per amino acid, not globally, because that is the convention
+    `general_geomean` is used with everywhere else - a CAI/tAI profile
+    normalizes each synonymous family against its own best codon
+    (`RSCUs[codon] / max(RSCUs of that family)`), so a sequence made entirely
+    of optimal codons scores 1.0. Normalizing globally instead would make the
+    achievable maximum depend on which amino acids the gene happens to contain.
+
+    argmax(weight) == argmin(loss) by construction, so DCUB's own codon choice
+    is preserved exactly; the mapping only decides how much WORSE the
+    alternatives are considered to be. Amino acids whose codons all tie get
+    1.0 across the board - they are all equally optimal, and spreading them
+    over the range would invent a preference DCUB does not have.
+    """
+    weights: typing.Dict[str, typing.Dict[str, float]] = {}
+    for amino_acid, codon_losses in loss_table.items():
+        if not codon_losses:
+            weights[amino_acid] = {}
+            continue
+
+        losses = list(codon_losses.values())
+        best_loss, worst_loss = min(losses), max(losses)
+        span = worst_loss - best_loss
+        if span == 0:
+            weights[amino_acid] = {codon: 1.0 for codon in codon_losses}
+            continue
+
+        weights[amino_acid] = {
+            codon: DCUB_WEIGHT_FLOOR
+            + (1.0 - DCUB_WEIGHT_FLOOR) * (worst_loss - loss) / span
+            for codon, loss in codon_losses.items()
+        }
+    return weights
+
+
+def flatten_codon_table(
+    codon_table: typing.Mapping[str, typing.Mapping[str, float]],
+) -> typing.Dict[str, float]:
+    """`{amino_acid: {codon: weight}}` -> the flat `{codon: weight}` profile
+    `general_geomean` consumes."""
+    return {
+        codon: float(weight)
+        for codon_weights in codon_table.values()
+        for codon, weight in codon_weights.items()
+    }
+
 
 def rare_codons(organisms: typing.Sequence[models.Organism]) -> typing.FrozenSet[str]:
     """Codons DCUB's own `_get_optimal_codon` would refuse to select: those
@@ -85,23 +153,28 @@ def _rare_codon_count(sequence: str, penalized: typing.FrozenSet[str]) -> int:
 def make_dcub_custom_score(
     codon_table: typing.Mapping[str, typing.Mapping[str, float]],
 ) -> typing.Callable[[str], float]:
-    """Wrap a `{amino_acid: {codon: score}}` table as the `score(seq) -> float`
+    """Wrap a `{amino_acid: {codon: weight}}` table as the `score(seq) -> float`
     callable ESO's CustomScore expects (higher is better).
 
-    A codon with no table entry contributes 0, matching ESO's own
-    "missing entry per codon -> 0" convention
-    (single_codon_optimization_method._get_max_organism_attribute_value).
+    Scores with `general_geomean` - DCUB's canonical "how well does this ORF
+    match this set of codon weights" routine, the same one EvaluationModule and
+    the zscore path call - rather than summing the weights. Summing was a
+    re-implementation with a different aggregation: it ranks single-codon swaps
+    identically but weighs multi-codon moves differently, and a hotspot window
+    usually spans several codons, so repair should optimize the quantity
+    selection is later scored on.
+
+    Weights are expected in (0, 1] with the preferred codon of each amino acid
+    at 1.0 - see loss_table_to_weights, and the CAI/tAI profiles this shares a
+    scale with.
     """
+    profile = flatten_codon_table(codon_table)
 
     def dcub_custom_score(sequence: str) -> float:
-        total = 0.0
-        for index in range(0, len(sequence) - (len(sequence) % 3), 3):
-            codon = sequence[index:index + 3].upper()
-            amino_acid = nt_to_aa.get(codon)
-            if amino_acid is None:
-                continue
-            total += codon_table.get(amino_acid, {}).get(codon, 0.0)
-        return total
+        if len(sequence) < 3:
+            # gmean of an empty list is nan; ESO can hand a short slice in.
+            return 0.0
+        return float(general_geomean([sequence], weights=profile)[0])
 
     return dcub_custom_score
 
@@ -142,9 +215,10 @@ def _table_from_codon_loss(
     optimization_cub_index: models.ORFOptimizationCubIndex,
     run_summary: RunSummary,
 ) -> typing.Dict[str, typing.Dict[str, float]]:
-    """single_codon_* methods pick the argMIN of a loss table. Negate it so the
-    same codon becomes the argMAX, matching this module's higher-is-better
-    contract.
+    """single_codon_* methods pick the argMIN of a loss table.
+    `loss_table_to_weights` maps it onto CAI-style weights in (0, 1] with the
+    chosen codon at 1.0, so the same codon becomes the argMAX and the result
+    can be scored by `general_geomean` alongside every other family.
 
     Recorded under its own "hotspot_avoidance_detailed_<index>" key rather
     than overwriting the ORF module's. The two tables should be identical -
@@ -162,10 +236,7 @@ def _table_from_codon_loss(
             optimization_cub_index, stage="hotspot_avoidance"
         ),
     )
-    return {
-        amino_acid: {codon: -loss for codon, loss in codon_losses.items()}
-        for amino_acid, codon_losses in loss_table.items()
-    }
+    return loss_table_to_weights(loss_table)
 
 
 def _wanted_organism_profile_score_fn(
