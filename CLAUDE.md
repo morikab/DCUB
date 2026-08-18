@@ -125,9 +125,22 @@ sequence that isn't what ships.
 - `dcub_score_adapter.py` - `build_dcub_score_fn` is the entry point: DCUB's
   preference model as the `score(seq) -> float` callable ESO's `CustomScore`
   wants, **higher is better**, for any optimization method.
-  - `single_codon_*` (negated loss table) and `single_wanted_organism` (the
-    wanted organism's CUB profile) decompose per codon, so they go through
-    `build_dcub_codon_table` + `make_dcub_custom_score`.
+  - `single_wanted_organism` is scored with **`general_geomean`** against the
+    wanted organism's CUB profile - the same routine `EvaluationModule` and the
+    zscore path call. Not a summed table: a sum ranks single-codon swaps
+    identically but weighs multi-codon moves differently, and a hotspot window
+    usually spans several codons, so repair should optimize the quantity
+    selection is later scored on. It also substitutes the profile's mean weight
+    for a codon the profile omits (a hand-built table defaulted those to 0.0,
+    which in a geometric mean zeroes the whole score) and skips Met/Trp/stop,
+    which have no choice to optimize.
+  - `single_codon_*` is the one family with no canonical whole-sequence scorer,
+    because DCUB never computes one for it - the method picks per-amino-acid
+    argmin of a loss table combining wanted and unwanted organisms. That table
+    is negated to higher-is-better and summed by `make_dcub_custom_score`.
+    `general_geomean` is not an option here: negated losses are <= 0 and its
+    geometric mean returns `nan`. This is the only place a per-codon table
+    still exists, and `build_dcub_codon_table` now serves only it.
   - `zscore_*` does **not** decompose - its score is a property of the whole
     sequence - and is evaluated **exactly**, per trial sequence, by
     `_exact_zscore_score_fn`. It previously used a per-codon proxy table built

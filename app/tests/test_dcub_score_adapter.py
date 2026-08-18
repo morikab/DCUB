@@ -6,6 +6,7 @@ from modules import models
 from modules.ORF.single_codon_optimization_method import _calculate_codons_loss
 from modules.ORF.single_codon_optimization_method import orf_detailed_summary_key
 from modules.run_summary import RunSummary
+from modules.shared_functions_and_vars import synonymous_codons
 
 
 def _organism(name, is_optimized, cai_weights):
@@ -269,7 +270,7 @@ class TestSingleOrganismFamily:
             optimization_method=method,
             optimization_cub_index=cub_index,
         )
-        table = build_dcub_codon_table(
+        score_fn = build_dcub_score_fn(
             module_input=_module_input(organisms, method),
             optimization_cub_index=cub_index,
             sequence="ATG" * 20,
@@ -277,8 +278,92 @@ class TestSingleOrganismFamily:
             run_summary=RunSummary(),
         )
 
-        for amino_acid, expected_codon in expected.items():
-            assert max(table[amino_acid], key=table[amino_acid].get) == expected_codon
+        # Only the amino acids this fixture gives a STRICT maximum can be
+        # asserted on. The rest are uniform at 0.2, so both selectors are
+        # picking arbitrarily among equals and any assertion would be testing
+        # dict iteration order, not preference. (The previous table-based
+        # implementation went out of its way to reproduce _get_optimal_codons'
+        # arbitrary tie pick; general_geomean does not control tie-breaks, and
+        # does not need to - tied codons are by definition equally preferred,
+        # and DNAChisel only chooses among them inside a hotspot window.)
+        differentiated = {"C": "TGT", "D": "GAT", "K": "AAG", "F": "TTT"}
+        for amino_acid, expected_codon in differentiated.items():
+            assert expected[amino_acid] == expected_codon, "fixture no longer differentiates"
+            codons = synonymous_codons[amino_acid]
+            assert max(codons, key=score_fn) == expected_codon, amino_acid
+
+    def test_score_is_the_same_routine_evaluation_uses(self, two_organisms):
+        """Not a re-implementation: the value must equal general_geomean against
+        the wanted organism's profile, which is what EvaluationModule scores
+        with. A summed table would rank single-codon swaps the same but weigh
+        multi-codon moves differently - and a hotspot window spans several."""
+        from modules.ORF.calculating_cai import general_geomean
+
+        method = models.ORFOptimizationMethod.single_wanted_organism
+        cub_index = models.ORFOptimizationCubIndex.codon_adaptation_index
+        module_input = _module_input(two_organisms, method)
+
+        score_fn = build_dcub_score_fn(
+            module_input=module_input,
+            optimization_cub_index=cub_index,
+            sequence=module_input.sequence,
+            skipped_codons_num=0,
+            run_summary=RunSummary(),
+        )
+
+        candidate = "ATGTGTTGCAAAGATTTT"
+        wanted = next(o for o in two_organisms if o.is_optimized)
+        expected = general_geomean([candidate], weights=wanted.cai_profile)[0]
+        assert score_fn(candidate) == pytest.approx(float(expected))
+
+    def test_a_codon_missing_from_the_profile_does_not_zero_the_score(self):
+        """general_geomean substitutes the profile's mean weight for a codon it
+        omits. Building the table by hand defaulted those to 0.0, which in a
+        geometric mean would drag the whole sequence's score to zero."""
+        from modules.shared_functions_and_vars import nt_to_aa
+
+        weights = {codon: 0.5 for codon in nt_to_aa}
+        del weights["TGT"]
+        # Frequencies stay complete on purpose: TGT must clear the rare-codon
+        # floor, so this isolates the PROFILE gap rather than tripping the
+        # penalty and proving nothing about general_geomean.
+        frequencies = {codon: 0.5 for codon in nt_to_aa}
+        organisms = [
+            models.Organism(name="wanted", is_optimized=True, optimization_priority=50,
+                            cai_profile=dict(weights), tai_profile=dict(weights),
+                            codon_frequencies=dict(frequencies)),
+            models.Organism(name="unwanted", is_optimized=False, optimization_priority=50,
+                            cai_profile={c: 0.5 for c in nt_to_aa},
+                            tai_profile={c: 0.5 for c in nt_to_aa},
+                            codon_frequencies=dict(frequencies)),
+        ]
+        method = models.ORFOptimizationMethod.single_wanted_organism
+        module_input = _module_input(organisms, method)
+
+        score_fn = build_dcub_score_fn(
+            module_input=module_input,
+            optimization_cub_index=models.ORFOptimizationCubIndex.codon_adaptation_index,
+            sequence=module_input.sequence,
+            skipped_codons_num=0,
+            run_summary=RunSummary(),
+        )
+
+        assert score_fn("TGTAAAGAT") > 0
+
+    def test_table_builder_rejects_this_family(self, two_organisms):
+        """single_wanted_organism no longer goes through a per-codon table -
+        general_geomean is the canonical scorer. Asking for a table should say
+        so rather than quietly returning a differently-aggregated one."""
+        with pytest.raises(ValueError, match="general_geomean"):
+            build_dcub_codon_table(
+                module_input=_module_input(
+                    two_organisms, models.ORFOptimizationMethod.single_wanted_organism
+                ),
+                optimization_cub_index=models.ORFOptimizationCubIndex.codon_adaptation_index,
+                sequence="ATG" * 20,
+                skipped_codons_num=0,
+                run_summary=RunSummary(),
+            )
 
 
 import math

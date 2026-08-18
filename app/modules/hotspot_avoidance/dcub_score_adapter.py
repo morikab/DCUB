@@ -17,6 +17,7 @@ from scipy.spatial.distance import pdist
 
 from logger_factory.logger_factory import LoggerFactory
 from modules import models
+from modules.ORF.calculating_cai import general_geomean
 from modules.ORF.single_codon_optimization_method import _calculate_codons_loss
 from modules.ORF.single_codon_optimization_method import orf_detailed_summary_key
 from modules.configuration import Configuration
@@ -127,16 +128,12 @@ def build_dcub_codon_table(
             run_summary=run_summary,
         )
 
-    if optimization_method.is_single_organism_optimization:
-        return _table_from_wanted_organism_profile(
-            module_input=module_input,
-            optimization_cub_index=optimization_cub_index,
-        )
-
     raise ValueError(
         f"Cannot build a codon preference table for optimization method "
-        f"{optimization_method}. The zscore family has no per-codon table - its "
-        f"score is a property of the whole sequence; use build_dcub_score_fn."
+        f"{optimization_method}. Only the single_codon_* family decomposes into "
+        f"one; single_wanted_organism is scored with general_geomean against the "
+        f"wanted organism's CUB profile, and the zscore family is scored on the "
+        f"whole sequence. Use build_dcub_score_fn."
     )
 
 
@@ -171,43 +168,44 @@ def _table_from_codon_loss(
     }
 
 
-def _table_from_wanted_organism_profile(
+def _wanted_organism_profile_score_fn(
     module_input: models.ModuleInput,
     optimization_cub_index: models.ORFOptimizationCubIndex,
-) -> typing.Dict[str, typing.Dict[str, float]]:
+) -> typing.Callable[[str], float]:
     """single_wanted_organism picks the argMAX of the wanted organism's CUB
-    profile directly (see ORF/single_organism_optimization_method._get_optimal_codons),
-    so that profile IS the higher-is-better table.
+    profile per amino acid (see
+    ORF/single_organism_optimization_method._get_optimal_codons), so scoring a
+    candidate is exactly "how well does this sequence match that profile" -
+    which is what `general_geomean` computes, and what EvaluationModule and the
+    zscore path already call.
 
-    The per-amino-acid dict is built by walking `profile.items()` (falling
-    back to `synonymous_codons` order only for codons the profile omits)
-    rather than walking `synonymous_codons` order directly, so that ties are
-    broken identically to `_get_optimal_codons`'s own `candidate_codons`
-    construction - `_get_optimal_codons` builds its candidate dict from
-    `cub_profile.items()` too. Building from `synonymous_codons` order
-    instead makes `max()` resolve ties (equal-weight codons) differently
-    from `_get_optimal_codons`, so the two argmax picks silently diverge
-    whenever a profile has tied weights - verified against this module's own
-    test fixture, which ties every amino acid but Cysteine at 0.2 and hits
-    this exact divergence for 14 of 21 amino acids without this fix.
+    Using it rather than summing profile weights ourselves matters for three
+    reasons beyond not duplicating the routine:
+
+    - It is the same aggregation the EVALUATION step applies, so hotspot repair
+      optimizes the quantity selection is later scored on. A sum and a geometric
+      mean rank single-codon swaps identically, but weigh multi-codon moves
+      differently - and a hotspot window usually spans several codons.
+    - It substitutes the profile's mean weight for a codon the profile omits.
+      Building a table ourselves defaulted those to 0.0, which in a geometric
+      mean would zero the entire score.
+    - It skips non-synonymous codons (Met, Trp, stop), which have no choice to
+      optimize, instead of letting them dilute the score.
     """
     wanted_organisms = [organism for organism in module_input.organisms if organism.is_optimized]
     if len(wanted_organisms) != 1:
         logger.warning(
             f"Number of wanted organisms is {len(wanted_organisms)} for optimization method "
-            f"{module_input.orf_optimization_method}. Building the codon table from the first "
-            f"wanted organism, matching _get_optimal_codons."
+            f"{module_input.orf_optimization_method}. Scoring against the first wanted "
+            f"organism, matching _get_optimal_codons."
         )
     wanted_organism = wanted_organisms[0]
     profile = getattr(wanted_organism, f"{optimization_cub_index.value.lower()}_profile", {}) or {}
 
-    table = {}
-    for amino_acid, codons in synonymous_codons.items():
-        codon_scores = {codon: float(weight) for codon, weight in profile.items() if codon in codons}
-        for codon in codons:
-            codon_scores.setdefault(codon, 0.0)
-        table[amino_acid] = codon_scores
-    return table
+    def wanted_organism_profile_score(candidate: str) -> float:
+        return float(general_geomean([candidate], weights=profile)[0])
+
+    return wanted_organism_profile_score
 
 
 def _zscore_per_codon_sweep(
@@ -350,6 +348,11 @@ def build_dcub_score_fn(
             optimization_cub_index=optimization_cub_index,
             sequence=sequence,
             skipped_codons_num=skipped_codons_num,
+        )
+    elif optimization_method.is_single_organism_optimization:
+        base_score_fn = _wanted_organism_profile_score_fn(
+            module_input=module_input,
+            optimization_cub_index=optimization_cub_index,
         )
     else:
         codon_table = build_dcub_codon_table(
