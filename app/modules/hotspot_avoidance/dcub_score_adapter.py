@@ -10,6 +10,7 @@ Normalizing the direction here means nothing downstream needs to know which
 DCUB method family produced the table.
 """
 
+import math
 import typing
 
 import numpy as np
@@ -86,7 +87,15 @@ def loss_table_to_weights(
         losses = list(codon_losses.values())
         best_loss, worst_loss = min(losses), max(losses)
         span = worst_loss - best_loss
-        if span == 0:
+        # Relative tolerance, not `span == 0`. A min-max rescale turns the
+        # observed span into the full [FLOOR, 1] range whatever its size, so an
+        # exact test would amplify a difference of ~1e-17 into a 100x weight
+        # gap - inventing a strong preference out of floating-point noise.
+        # Codons carrying identical weights do currently produce bit-identical
+        # losses (the arithmetic path is the same for each), so this is
+        # defensive rather than a fix for an observed case; it costs nothing,
+        # because a span this small is not a preference worth expressing.
+        if math.isclose(worst_loss, best_loss, rel_tol=1e-9, abs_tol=1e-12):
             weights[amino_acid] = {codon: 1.0 for codon in codon_losses}
             continue
 

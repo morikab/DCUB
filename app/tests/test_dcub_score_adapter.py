@@ -149,6 +149,7 @@ def test_max_cai_tai_single_codon_run_completes(two_organisms):
 
 
 from modules.hotspot_avoidance.dcub_score_adapter import DCUB_WEIGHT_FLOOR
+from modules.hotspot_avoidance.dcub_score_adapter import loss_table_to_weights
 from modules.hotspot_avoidance.dcub_score_adapter import build_dcub_codon_table
 from modules.hotspot_avoidance.dcub_score_adapter import build_dcub_score_fn
 from modules.hotspot_avoidance.dcub_score_adapter import make_dcub_custom_score
@@ -829,3 +830,30 @@ def test_when_no_free_break_exists_repair_gives_up_the_least_it_can():
     assert cost == pytest.approx(cheapest), (
         f"gave up {cost:.3f} at {amino_acid} when {cheapest:.3f} was available"
     )
+
+
+class TestTiedCodonsAreNotAmplified:
+    """A min-max rescale maps whatever span it sees onto the full
+    [DCUB_WEIGHT_FLOOR, 1] range, so a near-tie must be treated as a tie -
+    otherwise floating-point noise becomes a 100x weight difference."""
+
+    def test_bit_identical_losses_map_to_a_flat_one(self):
+        weights = loss_table_to_weights({"V": {c: 0.02 for c in ("GTA", "GTC", "GTG", "GTT")}})
+        assert set(weights["V"].values()) == {1.0}
+
+    def test_a_float_noise_span_is_treated_as_a_tie(self):
+        """The failure this guards: without a tolerance, these two differ by
+        ~1e-18 and would come out as 1.0 and 0.01."""
+        weights = loss_table_to_weights({"C": {"TGT": 0.02, "TGC": 0.02 + 1e-18}})
+
+        assert weights["C"]["TGT"] == 1.0
+        assert weights["C"]["TGC"] == 1.0
+
+    def test_a_real_difference_is_still_spread_across_the_range(self):
+        """The tolerance must not swallow genuine preferences."""
+        weights = loss_table_to_weights({"V": {"GTG": 0.125, "GTA": 0.17,
+                                               "GTC": 0.305, "GTT": 0.445}})
+
+        assert weights["V"]["GTG"] == pytest.approx(1.0)
+        assert weights["V"]["GTT"] == pytest.approx(DCUB_WEIGHT_FLOOR)
+        assert weights["V"]["GTG"] > weights["V"]["GTA"] > weights["V"]["GTC"] > weights["V"]["GTT"]
