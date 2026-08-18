@@ -152,6 +152,36 @@ sequence that isn't what ships.
     mirroring `_get_optimal_codon`'s own fallback. The penalty can never block a
     repair: DNAChisel objectives are soft and `resolve_constraints()` runs
     first, so it only decides which legal codon is used.
+- `hotspot_avoidance_main.py` - `widen_slippage_base_units` re-expresses
+  **sub-codon** slippage base units at `lcm(base_unit, 3)`, working around
+  ESO's `exclusion_site_correcter` discarding every avoidance row narrower than
+  3nt once exclusions are present (which this module always passes). Units of
+  3nt and wider are left alone - widening those breaks repairs that already
+  worked.
+
+  It declares `num_base_units = max(2, whole_units)`. ESO's
+  `modify_df_slippage` iterates `range(0, num_base_units - 1, 2)` and so emits
+  nothing below 2, which used to discard any repeat shorter than **two** widened
+  units - 12nt for a dinucleotide. Declaring 2 makes that loop emit chunk 0,
+  which *is* the real repeat, halving the minimum repairable run.
+
+  **This is not the same as padding the window outward**, and the difference is
+  a correctness one. A padded row makes ESO avoid a pattern straddling the
+  repeat's flank, which DNAChisel can satisfy by editing the *flank* - measured
+  on mCherry, padding one codon each side of `CGCGCG` at 660-666 produced
+  `GAG`->`GAA`, reported one edit, and left the repeat completely intact. A
+  false "repaired" is worse than the honest warning it replaces. Anchoring on
+  the repeat produced `GCG`->`GCC` and destroyed it.
+
+  `_chunks_outside_detected_windows` enforces that distinction at runtime
+  rather than by comment: it re-derives the chunks ESO will build and reports
+  any that escape their detected window. It exists because the `max(2, ...)`
+  trick depends on the loop bound in the **ESO revision pinned in
+  pyproject.toml**; if an upgrade changed it to `range(0, num_base_units, 2)`,
+  chunk 1 would constrain sequence that was never a hotspot. The guard turns
+  that into a message naming the cause instead of a spray of
+  dropped-constraint warnings.
+
 - `hotspot_avoidance_main.py` - detection plus the `eso.optimize.optimization_engine`
   call. Reads `config["HOTSPOT_AVOIDANCE"]` (module-scope `config =
   Configuration.get_config()`, matching `orf_main.py`'s pattern) **inside**

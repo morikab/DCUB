@@ -17,6 +17,7 @@ from dataclasses import field
 import numpy as np
 import pandas as pd
 from eso import suspect_site_extractor
+from eso.detection.slippage import modify_df_slippage
 from eso.optimize import optimization_engine
 
 from logger_factory.logger_factory import LoggerFactory
@@ -121,19 +122,40 @@ def widen_slippage_base_units(
         widened_base_unit = math.lcm(length_base_unit, 3)
         start = int(row["start"])
         end = int(row["end"])
-        num_base_units = (end - start) // widened_base_unit
+        whole_units = (end - start) // widened_base_unit
 
-        if num_base_units < 2:
-            # `modify_df_slippage` iterates range(0, num_base_units - 1, 2),
-            # which is empty below 2, so such a row yields no constraints
-            # anyway. Say so rather than dropping it silently.
+        if whole_units < 1:
+            # Not even one widened unit fits, so there is no chunk that both
+            # covers whole codons AND lies inside the detected repeat. Nothing
+            # correct to emit; say so rather than dropping it silently.
             widening_warnings.append(
                 f"Slippage site at {start}-{end} (base unit {length_base_unit}nt) is too short "
                 f"to disrupt at codon resolution and was left unmodified."
             )
             continue
 
-        widened_end = start + num_base_units * widened_base_unit
+        # ESO's modify_df_slippage iterates `range(0, num_base_units - 1, 2)`,
+        # so it emits nothing at all below 2 units - which discarded every
+        # repeat shorter than TWO widened units (12nt for a dinucleotide),
+        # even though a single widened unit is already a perfectly good
+        # avoidance target: it is codon-aligned, wider than ESO's 2nt filter,
+        # and lies entirely inside the detected repeat.
+        #
+        # Declaring 2 units makes that loop run exactly once, emitting chunk 0
+        # - the first widened_base_unit of the real repeat. Chunk 1 is never
+        # emitted (the loop steps by 2), so the declared count being one higher
+        # than the run really contains costs nothing.
+        #
+        # NOT the same as padding the window outward. A padded row would make
+        # ESO avoid a pattern that straddles the repeat's flank, and DNAChisel
+        # could then satisfy it by editing the FLANK and leaving the repeat
+        # intact - measured on mCherry: padding one codon each side around
+        # CGCGCG at 660-666 produced GAG->GAA, one reported edit, repeat fully
+        # intact. Anchoring on the repeat produced GCG->GCC and destroyed it.
+        # _assert_chunks_stay_inside below is what keeps that distinction
+        # enforced rather than merely intended.
+        num_base_units = max(2, whole_units)
+        widened_end = start + whole_units * widened_base_unit
         widened_row = row.to_dict()
         widened_row.update({
             "length_base_unit": widened_base_unit,
@@ -141,6 +163,10 @@ def widen_slippage_base_units(
             "end": widened_end,
             # Recomputed, never carried over: the row must stay honest about
             # what is actually at these (possibly shortened) coordinates.
+            # Sliced from the REAL repeat, never padded outward. Long enough
+            # for modify_df_slippage to index chunk 0 out of it; when
+            # num_base_units was raised to 2 this is still just the one real
+            # widened unit, and chunk 1 is never requested.
             "sequence": sequence[start:widened_end],
             # Blanked for the same reason. ESO derives this from the base unit
             # and repeat count (-12.9 + 0.729n for 1nt units, -4.749 + 0.063n
@@ -164,6 +190,56 @@ def widen_slippage_base_units(
         return df_slippage.iloc[0:0].copy(), widening_warnings
 
     return pd.DataFrame(rows, columns=list(df_slippage.columns)), widening_warnings
+
+
+def _chunks_outside_detected_windows(
+    widened: pd.DataFrame,
+    detected_windows: typing.Mapping[int, typing.Tuple[int, int]],
+) -> typing.List[str]:
+    """Verify every avoidance chunk ESO will derive from `widened` lies inside
+    the window it came from.
+
+    This is a version guard, not a sanity check. `widen_slippage_base_units`
+    declares `num_base_units = 2` for a repeat that physically contains one
+    widened unit, relying on ESO's
+    `modify_df_slippage` iterating `range(0, num_base_units - 1, 2)` and so
+    emitting only chunk 0. That holds for the ESO revision pinned in
+    pyproject.toml. If a future revision changed the bound to
+    `range(0, num_base_units, 2)`, chunk 1 would become an AvoidPattern over
+    sequence that was never detected as a hotspot.
+
+    The exclusion lock would contain the damage - that sequence is locked, so
+    the constraint would be dropped as unsatisfiable - but it would be dropped
+    noisily and for the wrong reason. Checking directly means an ESO upgrade
+    that invalidates the assumption reports exactly that, instead of surfacing
+    as confusing dropped-constraint warnings.
+
+    Returns one message per out-of-bounds chunk; empty means the assumption
+    still holds.
+    """
+    if widened.empty:
+        return []
+
+    problems = []
+    for _, chunk in modify_df_slippage(widened.copy()).iterrows():
+        chunk_start, chunk_end = int(chunk["start"]), int(chunk["end"])
+        window = next(
+            (
+                (window_start, window_end)
+                for window_start, window_end in detected_windows.values()
+                if window_start <= chunk_start < window_end
+            ),
+            None,
+        )
+        if window is None or chunk_end > window[1]:
+            problems.append(
+                f"ESO derived an avoidance chunk at {chunk_start}-{chunk_end} that is not "
+                f"contained in any detected slippage window. The pinned ESO revision's "
+                f"modify_df_slippage emits only the first of every two base units; this "
+                f"module relies on that. Re-check widen_slippage_base_units against the "
+                f"ESO revision pinned in pyproject.toml."
+            )
+    return problems
 
 
 def patch_sequence(
@@ -253,6 +329,20 @@ def patch_sequence(
             detection.get("df_slippage"),
             sequence,
         )
+        # Guard the ESO-revision assumption widen_slippage_base_units makes.
+        # Cheap - the frame holds one row per detected site - and it turns an
+        # ESO upgrade that breaks the assumption into a message naming the
+        # cause, rather than a spray of dropped-constraint warnings.
+        if df_slippage is not None and not df_slippage.empty:
+            detected_windows = {
+                index: (int(row["start"]), int(row["end"]))
+                for index, row in enumerate(
+                    detection["df_slippage"].to_dict("records")
+                )
+            }
+            slippage_warnings.extend(
+                _chunks_outside_detected_windows(df_slippage, detected_windows)
+            )
 
         with warnings.catch_warnings(record=True) as caught_warnings:
             warnings.simplefilter("always")

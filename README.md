@@ -156,9 +156,13 @@ heads-up on edit volume and false-positive rate, not a correctness concern.
 
 ESO discards slippage-avoidance patterns narrower than 3nt whenever locked
 regions are present, so DCUB re-expresses sub-codon repeat units (a 15×`A` run
-becomes 5×`AAA`) before handing them over. A repeat too short to yield two
-codon-width units cannot be disrupted at codon resolution; those are reported
-in the run summary's `warnings` rather than silently skipped.
+becomes 5×`AAA`) before handing them over. A repeat too short to yield even one
+codon-width unit cannot be disrupted at codon resolution; those are reported in
+the run summary's `warnings` rather than silently skipped.
+
+In practice this no longer bites: the shortest span ESO's detector reports is
+12nt for a 1nt base unit and 6nt for a 2nt one, and both clear the one-unit
+minimum. The path is kept, and reported, for completeness.
 
 ---
 

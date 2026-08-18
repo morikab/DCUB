@@ -141,12 +141,13 @@ class TestWidenSlippageBaseUnits:
         assert df.iloc[0].to_dict() == original.iloc[0].to_dict()
         assert df.iloc[0]["sequence"] == "MARKER-NOT-A-SLICE"
 
-    def test_run_too_short_to_widen_is_dropped_with_a_warning(self):
-        sequence = PLANTED_PREFIX + "AAAA" + PLANTED_SUFFIX
-        # 4nt at 1nt base units -> (34 - 30) // 3 == 1 widened unit, and
-        # modify_df_slippage needs at least 2 to emit anything.
+    def test_run_shorter_than_one_widened_unit_is_dropped_with_a_warning(self):
+        """The remaining unrepairable case: not even ONE widened unit fits, so
+        there is no chunk that both covers whole codons and stays inside the
+        detected repeat. 4nt at 2nt base units -> (34 - 30) // 6 == 0."""
+        sequence = PLANTED_PREFIX + "ACAC" + PLANTED_SUFFIX
         df, warnings_out = widen_slippage_base_units(
-            _slippage_df([30, 34, 1, "AAAA", 4, -0.5]),
+            _slippage_df([30, 34, 2, "ACAC", 2, -0.5]),
             sequence,
         )
 
@@ -154,8 +155,55 @@ class TestWidenSlippageBaseUnits:
         assert list(df.columns) == SLIPPAGE_COLUMNS
         assert len(warnings_out) == 1
         assert "30-34" in warnings_out[0]
-        assert "1nt" in warnings_out[0]
+        assert "2nt" in warnings_out[0]
         assert "left unmodified" in warnings_out[0]
+
+    def test_a_single_widened_unit_is_enough(self):
+        """A run holding exactly ONE widened unit used to be discarded, because
+        modify_df_slippage iterates range(0, num_base_units - 1, 2) and emits
+        nothing below 2. Declaring 2 units makes that loop emit chunk 0 - which
+        IS the real repeat - so the minimum repairable run halves: 6nt for a
+        dinucleotide instead of 12nt."""
+        sequence = PLANTED_PREFIX + "CGCGCG" + PLANTED_SUFFIX
+        df, warnings_out = widen_slippage_base_units(
+            _slippage_df([30, 36, 2, "CGCGCG", 3, -4.2]),
+            sequence,
+        )
+
+        assert warnings_out == []
+        assert len(df) == 1
+        row = df.iloc[0]
+        assert int(row["length_base_unit"]) == 6
+        assert int(row["num_base_units"]) == 2
+        # `end` stays at the real extent of the repeat - only the declared unit
+        # COUNT is inflated, never the coordinates.
+        assert int(row["start"]) == 30
+        assert int(row["end"]) == 36
+        assert row["sequence"] == "CGCGCG" == sequence[30:36]
+
+    def test_declared_units_never_extend_the_avoided_chunk_past_the_repeat(self):
+        """The property that makes declaring 2 units sound and padding the
+        window unsound: every chunk ESO derives must lie INSIDE the detected
+        repeat. A padded row would let DNAChisel satisfy the constraint by
+        editing the flank and leaving the repeat intact - measured on mCherry,
+        padding one codon each side around CGCGCG produced GAG->GAA, one
+        reported edit, and the repeat fully intact."""
+        from eso.detection.slippage import modify_df_slippage
+
+        sequence = PLANTED_PREFIX + "CGCGCG" + PLANTED_SUFFIX
+        df, _ = widen_slippage_base_units(
+            _slippage_df([30, 36, 2, "CGCGCG", 3, -4.2]),
+            sequence,
+        )
+
+        chunks = modify_df_slippage(df)
+        assert len(chunks) == 1, "chunk 1 must never be emitted"
+        chunk = chunks.iloc[0]
+        assert (int(chunk["start"]), int(chunk["end"])) == (30, 36)
+        assert chunk["sequence"] == "CGCGCG"
+        # Wider than ESO's `df[df.start < df.end - 2]` filter, which is the
+        # whole reason widening exists at all.
+        assert int(chunk["start"]) < int(chunk["end"]) - 2
 
     def test_empty_and_missing_dataframes_are_passed_straight_back(self):
         empty = _slippage_df()
@@ -311,18 +359,39 @@ class TestDetectedRegions:
         assert result.detected_regions == []
         assert result.summary["detected_regions"] == []
 
-    def test_unwidenable_run_is_reported_but_still_counted_as_detected(self):
-        """The drop path, end to end through patch_sequence rather than through
-        the helper in isolation. A 2nt base unit widens to 6nt, and this run is
-        only 8nt long - one whole unit, below modify_df_slippage's minimum of
-        two - so it cannot be disrupted at codon resolution.
+    def test_unwidenable_run_is_reported_but_still_counted_as_detected(self, monkeypatch):
+        """The drop path, end to end through patch_sequence.
+
+        Detection is stubbed rather than planted in the sequence because every
+        sub-codon site ESO's detector actually emits is now repairable: its
+        smallest reported span is 12nt for a 1nt base unit and 6nt for a 2nt
+        one, both clearing the one-widened-unit minimum. The code path still
+        exists for a site narrower than lcm(base_unit, 3), so it stays covered
+        - it just can no longer be reached with real detector output.
 
         Pins all three wiring behaviours at once: the warning reaches the user,
         `detected_sites` still reports the site as DETECTED (it is counted from
         the original detection, not from the widened rows), and the sequence
         comes back untouched rather than half-edited.
         """
-        sequence = PLANTED_PREFIX + "CACACA" + PLANTED_SUFFIX
+        from modules.hotspot_avoidance import hotspot_avoidance_main
+
+        # 6nt filler keeps the ORF a whole number of codons; the stubbed row
+        # below describes a 4nt window inside it.
+        sequence = PLANTED_PREFIX + "ACACAC" + PLANTED_SUFFIX
+
+        def fake_extractor(target_seq, compute_motifs, num_sites, **kwargs):
+            return {
+                "df_recombination": pd.DataFrame(),
+                # 4nt at a 2nt base unit: (34 - 30) // lcm(2, 3) == 0, so not
+                # even one widened unit fits.
+                "df_slippage": _slippage_df([30, 34, 2, "ACAC", 2, -0.5]),
+            }
+
+        monkeypatch.setattr(
+            hotspot_avoidance_main, "suspect_site_extractor", fake_extractor
+        )
+
         result = patch_sequence(
             sequence=sequence,
             codon_table=_flat_codon_table(),
@@ -332,11 +401,31 @@ class TestDetectedRegions:
         # Detected - and still reported as such even though it was not repaired.
         assert result.detected_sites["slippage"] == 1
         assert result.warnings == [
-            "Slippage site at 30-38 (base unit 2nt) is too short to disrupt at "
+            "Slippage site at 30-34 (base unit 2nt) is too short to disrupt at "
             "codon resolution and was left unmodified."
         ]
         assert result.sequence_after == sequence
         assert result.num_edits == 0
+
+    def test_six_nucleotide_dinucleotide_repeat_is_now_repaired(self):
+        """The improvement, end to end: a 6nt CG repeat used to need 12nt to be
+        touchable at all. It is now repaired, and only inside its own window."""
+        sequence = PLANTED_PREFIX + "CGCGCG" + PLANTED_SUFFIX
+        result = patch_sequence(
+            sequence=sequence,
+            codon_table=_flat_codon_table(),
+            skipped_codons_num=0,
+        )
+
+        assert result.detected_sites["slippage"] >= 1
+        assert result.num_edits > 0
+        assert result.warnings == []
+        assert translate(result.sequence_before) == translate(result.sequence_after)
+        # Everything outside the codon-widened detected window is untouched.
+        editable_start = (min(r["start"] for r in result.detected_regions) // 3) * 3
+        editable_end = -(-max(r["end"] for r in result.detected_regions) // 3) * 3
+        assert result.sequence_after[:editable_start] == sequence[:editable_start]
+        assert result.sequence_after[editable_end:] == sequence[editable_end:]
 
     def test_four_nucleotide_base_unit_repeat_is_repaired(self):
         """Regression for the over-broad widening predicate: a 4nt base unit is
@@ -490,3 +579,45 @@ class TestDetectionConfiguration:
         )
         assert result.detected_sites["motifs"] == 0
         assert set(result.detected_sites) == {"recombination", "slippage", "motifs"}
+
+
+class TestEsoRevisionGuard:
+    """widen_slippage_base_units declares num_base_units=2 for a repeat holding
+    one widened unit, relying on the pinned ESO revision's modify_df_slippage
+    emitting only the first of every two units. This guard is what makes an ESO
+    upgrade that breaks the assumption say so."""
+
+    def test_guard_is_silent_when_every_chunk_stays_inside(self):
+        from modules.hotspot_avoidance.hotspot_avoidance_main import (
+            _chunks_outside_detected_windows,
+        )
+
+        sequence = PLANTED_PREFIX + "CGCGCG" + PLANTED_SUFFIX
+        widened, _ = widen_slippage_base_units(
+            _slippage_df([30, 36, 2, "CGCGCG", 3, -4.2]), sequence
+        )
+
+        assert _chunks_outside_detected_windows(widened, {0: (30, 36)}) == []
+
+    def test_guard_reports_a_chunk_that_escapes_the_detected_window(self):
+        """Simulates the failure mode: if a future ESO emitted more chunks than
+        the first of each pair, chunk 2 would land outside the repeat. Declaring
+        4 units makes the CURRENT loop emit chunks 0 and 2, which reproduces
+        exactly that shape without needing a modified ESO."""
+        from modules.hotspot_avoidance.hotspot_avoidance_main import (
+            _chunks_outside_detected_windows,
+        )
+
+        escaping = _slippage_df([30, 36, 6, "CGCGCG" * 4, 4, float("nan")])
+        problems = _chunks_outside_detected_windows(escaping, {0: (30, 36)})
+
+        assert len(problems) == 1
+        assert "42-48" in problems[0]
+        assert "pinned ESO revision" in problems[0]
+
+    def test_guard_handles_an_empty_frame(self):
+        from modules.hotspot_avoidance.hotspot_avoidance_main import (
+            _chunks_outside_detected_windows,
+        )
+
+        assert _chunks_outside_detected_windows(_slippage_df(), {}) == []
