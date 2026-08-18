@@ -202,11 +202,24 @@ only 2 were genuine `GATC` sites. `COMMON_MOTIFS` also defaults to `["dam",
 "dcm"]` rather than ESO's full bundle - `shine_dalgarno` and the two
 `sigma70` boxes are regulatory elements, not hypermutable sites. The deeper
 fix (exact-consensus filtering or a tighter PSSM threshold) belongs in ESO
-and is deferred to a follow-up spec; this task only changes DCUB's default
-and exposes `RECOMBINATION_MODE`/`SLIPPAGE_MODE`/`COMPUTE_MOTIFS`/
-`COMMON_MOTIFS` as config, threaded through `patch_sequence` and
-`HotspotAvoidanceModule.run_module` as same-named optional keyword
-arguments that fall back to config when omitted.
+and is deferred to a follow-up spec.
+
+Only `COMPUTE_MOTIFS` and `COMMON_MOTIFS` are configured. Detector mode
+selection is deliberately not: ESO already defaults to `"thorough"`
+recombination and `"default"` slippage, so naming those values here would
+only pin whatever ESO's defaults were when this was written.
+`patch_sequence` and `HotspotAvoidanceModule.run_module` still take
+`recombination_mode`/`slippage_mode` keyword arguments for a caller that
+needs to override; left unset, neither is passed and ESO's default applies.
+
+`COMMON_MOTIFS` is a different case and must NOT be dropped for the same
+"just use ESO's default" reason. ESO's default is `None`, and
+`suspect_site_extractor` guards with `if common_motifs:` - so with no
+`motifs_path` the motif list stays empty and `find_motif_sites` returns an
+empty frame. Motif detection would be switched on and silently detect
+nothing. Verified: a sequence carrying 5x `GATC` and 4x `CCAGG` reports 0
+motif rows with the ESO default and 12 with `["dam", "dcm"]`. Enabling
+`COMPUTE_MOTIFS` with an empty `COMMON_MOTIFS` now raises instead.
 
 Three non-obvious details in the `optimization_engine` call, each guarding a
 real failure:

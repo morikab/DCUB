@@ -277,17 +277,32 @@ def patch_sequence(
         compute_motifs = hotspot_config["COMPUTE_MOTIFS"]
     if common_motifs is None:
         common_motifs = hotspot_config["COMMON_MOTIFS"]
-    if recombination_mode is None:
-        recombination_mode = hotspot_config["RECOMBINATION_MODE"]
-    if slippage_mode is None:
-        slippage_mode = hotspot_config["SLIPPAGE_MODE"]
 
     with Timer() as timer:
-        extractor_kwargs = {
-            "recombination_mode": recombination_mode,
-            "slippage_mode": slippage_mode,
-        }
+        # Detector modes are omitted unless explicitly overridden, so ESO's own
+        # defaults apply rather than values restated here. Naming them would
+        # pin whatever ESO's defaults happened to be when this was written.
+        extractor_kwargs = {}
+        if recombination_mode is not None:
+            extractor_kwargs["recombination_mode"] = recombination_mode
+        if slippage_mode is not None:
+            extractor_kwargs["slippage_mode"] = slippage_mode
+
         if compute_motifs:
+            # COMMON_MOTIFS is NOT redundant with ESO's default, which is None.
+            # suspect_site_extractor guards with `if common_motifs:`, so a None
+            # default with no motifs_path leaves the motif list empty and
+            # find_motif_sites returns an empty frame - motif detection would be
+            # silently enabled and do nothing. Verified directly: with
+            # compute_motifs=True and common_motifs omitted, a sequence carrying
+            # 5x GATC and 4x CCAGG reports 0 motif rows; with ["dam", "dcm"] it
+            # reports 12.
+            if not common_motifs:
+                raise ValueError(
+                    "Motif detection is enabled but no motifs are configured. Set "
+                    "HOTSPOT_AVOIDANCE.COMMON_MOTIFS in app/modules/configuration.yaml "
+                    "(e.g. [\"dam\", \"dcm\"]), or set COMPUTE_MOTIFS to False."
+                )
             extractor_kwargs["common_motifs"] = list(common_motifs)
         detection = suspect_site_extractor(
             sequence,

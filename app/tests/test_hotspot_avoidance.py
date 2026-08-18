@@ -568,6 +568,71 @@ class TestDetectionConfiguration:
         assert captured["recombination_mode"] == "fast"
         assert captured["slippage_mode"] == "fast"
 
+    def test_detection_modes_are_omitted_when_not_overridden(self, monkeypatch):
+        """Not passed at all, rather than passed as a value restated here - so
+        ESO's own defaults apply. Restating them in configuration.yaml only
+        created a second place to drift from if ESO ever changed them."""
+        from modules.hotspot_avoidance import hotspot_avoidance_main
+
+        captured = {}
+
+        def fake_extractor(target_seq, compute_motifs, num_sites, **kwargs):
+            captured.update(kwargs)
+            captured["_keys"] = set(kwargs)
+            import pandas as pd
+            return {"df_recombination": pd.DataFrame(), "df_slippage": pd.DataFrame()}
+
+        monkeypatch.setattr(
+            hotspot_avoidance_main, "suspect_site_extractor", fake_extractor
+        )
+        patch_sequence(
+            sequence=CLEAN_SEQUENCE,
+            codon_table=_flat_codon_table(),
+            skipped_codons_num=0,
+        )
+
+        assert "recombination_mode" not in captured["_keys"]
+        assert "slippage_mode" not in captured["_keys"]
+
+    def test_enabling_motifs_without_configuring_any_is_rejected(self, monkeypatch):
+        """COMMON_MOTIFS is NOT redundant with ESO's default. ESO guards with
+        `if common_motifs:`, so its None default leaves the motif list empty and
+        find_motif_sites returns an empty frame - motif detection would be
+        switched on and silently do nothing. Fail loudly instead."""
+        from modules.hotspot_avoidance import hotspot_avoidance_main
+
+        monkeypatch.setitem(
+            hotspot_avoidance_main.config["HOTSPOT_AVOIDANCE"], "COMPUTE_MOTIFS", True
+        )
+        monkeypatch.setitem(
+            hotspot_avoidance_main.config["HOTSPOT_AVOIDANCE"], "COMMON_MOTIFS", []
+        )
+
+        with pytest.raises(ValueError, match="no motifs are configured"):
+            patch_sequence(
+                sequence=CLEAN_SEQUENCE,
+                codon_table=_flat_codon_table(),
+                skipped_codons_num=0,
+            )
+
+    def test_eso_default_common_motifs_would_detect_nothing(self):
+        """Pins the upstream behaviour the guard above exists for, so that if a
+        future ESO starts defaulting to its full bundled motif set, this test
+        fails and the guard can be revisited rather than quietly outliving its
+        reason."""
+        import numpy as np
+        from eso import suspect_site_extractor as real_extractor
+
+        sequence = "ATG" + "GATC" * 5 + "CCAGG" * 4 + "GCTTGTGATGAACATATCAAG"
+
+        without = real_extractor(sequence, compute_motifs=True, num_sites=np.inf)
+        with_motifs = real_extractor(
+            sequence, compute_motifs=True, num_sites=np.inf, common_motifs=["dam", "dcm"]
+        )
+
+        assert len(without["df_motifs"]) == 0
+        assert len(with_motifs["df_motifs"]) > 0
+
     def test_detected_sites_reports_zero_motifs_when_disabled(self):
         """With motifs off, suspect_site_extractor omits df_motifs entirely -
         the count must still be present and zero, not missing, since the

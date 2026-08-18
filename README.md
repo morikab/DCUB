@@ -145,8 +145,6 @@ To opt in, edit the `HOTSPOT_AVOIDANCE` section of
 HOTSPOT_AVOIDANCE:
   COMPUTE_MOTIFS: True
   COMMON_MOTIFS: ["dam", "dcm"]   # restricted to genuine methylation motifs
-  RECOMBINATION_MODE: "thorough"  # or "fast" - see eso.detection.dispatch
-  SLIPPAGE_MODE: "default"        # or "fast"
 ```
 
 Translation is unaffected either way this setting is configured; this is a
