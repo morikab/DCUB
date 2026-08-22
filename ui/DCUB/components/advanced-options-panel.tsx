@@ -47,14 +47,17 @@ export function AdvancedOptionsPanel({ isOpen, onClose }: AdvancedOptionsPanelPr
   const optimizationMethods = [
     { value: "single_codon_diff", label: "Single Codon Diff" },
     { value: "single_codon_ratio", label: "Single Codon Ratio" },
+    { value: "single_codon_weakest_link", label: "Single Codon Weakest Link" },
     // These strings are sent verbatim as orf_optimization_method and must be
     // ORFOptimizationMethod values (app/modules/models.py). The four Z-Score
     // ones carry an _aa_ segment; without it the request is rejected with a
     // 422 before any optimization starts.
     { value: "zscore_bulk_aa_diff", label: "Z-Score Bulk Diff" },
     { value: "zscore_bulk_aa_ratio", label: "Z-Score Bulk Ratio" },
+    { value: "zscore_bulk_aa_weakest_link", label: "Z-Score Bulk Weakest Link" },
     { value: "zscore_single_aa_diff", label: "Z-Score Single Diff" },
     { value: "zscore_single_aa_ratio", label: "Z-Score Single Ratio" },
+    { value: "zscore_single_aa_weakest_link", label: "Z-Score Single Weakest Link" },
   ]
 
   const resetToDefaults = () => {

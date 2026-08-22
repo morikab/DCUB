@@ -56,6 +56,24 @@ def _request_payload_literals() -> dict:
     return dict(re.findall(r'^\s*(\w+):\s*"([^"]*)",', block.group(1), re.MULTILINE))
 
 
+#: Backend methods the dropdown deliberately does not offer. single_wanted
+#: _organism scores against one wanted organism's profile alone, which sits
+#: outside the wanted-vs-unwanted tradeoff the rest of the UI is built around.
+#: Listed here so the coverage test below stays a real check rather than a
+#: rubber stamp - if a new method lands in the enum, that test fails until it
+#: is either offered or added here on purpose.
+UNOFFERED_METHODS = {"single_wanted_organism"}
+
+
+def test_the_dropdown_offers_every_backend_method_bar_documented_gaps():
+    """All three weakest-link methods were missing from the dropdown while
+    being fully implemented and working end to end (verified on mCherry against
+    E. coli/B. subtilis, with and without hotspot avoidance)."""
+    valid = {method.value for method in models.ORFOptimizationMethod}
+    missing = valid - set(_optimization_method_values()) - UNOFFERED_METHODS
+    assert not missing, f"backend methods the UI does not offer: {sorted(missing)}"
+
+
 def test_every_optimization_method_option_is_a_real_enum_value():
     valid = {method.value for method in models.ORFOptimizationMethod}
     offered = _optimization_method_values()
