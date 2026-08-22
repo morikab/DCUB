@@ -54,6 +54,17 @@ const initialState = {
   enableMotifDetection: false,
 }
 
+/** Dropdown values that predate the fix for the 422 on every Z-Score method.
+ *  A browser that ran the old build has one of these persisted, and would keep
+ *  sending it after the fix, so rehydration maps them to the enum values the
+ *  backend accepts. */
+const RENAMED_OPTIMIZATION_METHODS: Record<string, string> = {
+  zscore_bulk_diff: "zscore_bulk_aa_diff",
+  zscore_bulk_ratio: "zscore_bulk_aa_ratio",
+  zscore_single_diff: "zscore_single_aa_diff",
+  zscore_single_ratio: "zscore_single_aa_ratio",
+}
+
 export const useOptimizationStore = create<OptimizationState>()(
   persist(
     (set) => ({
@@ -103,6 +114,17 @@ export const useOptimizationStore = create<OptimizationState>()(
     }),
     {
       name: "dna-optimization-storage",
+      version: 1,
+      migrate: (persistedState, version) => {
+        if (version >= 1 || typeof persistedState !== "object" || persistedState === null) {
+          return persistedState as OptimizationState
+        }
+        const state = persistedState as Partial<OptimizationState>
+        const renamed = state.optimizationMethod
+          ? RENAMED_OPTIMIZATION_METHODS[state.optimizationMethod]
+          : undefined
+        return (renamed ? { ...state, optimizationMethod: renamed } : state) as OptimizationState
+      },
       partialize: (state) => ({
         dnaSequence: state.dnaSequence,
         wantedOrganisms: state.wantedOrganisms,
