@@ -129,6 +129,7 @@ def build_exclusion_regions(
     hotspot_regions: typing.Iterable[typing.Tuple[int, int]],
     sequence_length: int,
     locked_prefix_length: int = 0,
+    padding_codons: int = 0,
 ) -> typing.List[typing.Tuple[int, int]]:
     """Return the regions ESO must NOT modify: everything except the
     codon-boundary-widened hotspot windows, plus the initiation-optimized
@@ -138,8 +139,22 @@ def build_exclusion_regions(
     objective not to wander, every nucleotide outside a detected hotspot is
     handed to DNAChisel as an `AvoidChanges` constraint, so DCUB's chosen
     codons cannot drift no matter which optimization method produced them.
+
+    `padding_codons` unlocks that many whole codons on EACH side of every
+    window, and exists for the retry rounds in `patch_sequence`. A hotspot can
+    survive a repair that satisfies its own AvoidPattern: measured on mCherry,
+    the `CGCGCG` at [660, 666) was cleared by one edit, and the detector then
+    reported the same physical CG repeat one nucleotide to the left, at
+    [659, 665) with an identical slippage probability - the nucleotide keeping
+    it alive sat in the neighbouring, locked codon. Padding trades a little
+    locality for the reach to break that class of site. Regions may extend past
+    either end of the sequence here; `complement_regions` clips them.
     """
-    editable = merge_regions(widen_to_codon_boundaries(hotspot_regions))
+    padded = [
+        (int(start) - 3 * int(padding_codons), int(end) + 3 * int(padding_codons))
+        for start, end in hotspot_regions
+    ]
+    editable = merge_regions(widen_to_codon_boundaries(padded))
 
     # Clip the editable windows out of the initiation-optimized prefix. Doing
     # it here (rather than adding the prefix back as an exclusion afterwards)

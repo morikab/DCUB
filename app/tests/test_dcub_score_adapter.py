@@ -753,31 +753,46 @@ def test_repair_prefers_a_free_break_over_sacrificing_a_preferred_codon():
 
     Here Valine's synonymous codons are all tied, so breaking the repeat at the
     Val codon costs nothing, while touching the Arg or Ala of the repeat would
-    cost 0.031 / 0.040.
+    cost 0.031 / 0.040. The free break is taken FIRST - but it is measurably
+    not enough on its own, which is the whole reason repair iterates: the free
+    edit satisfies the detected pattern and leaves a shifted copy of the same
+    repeat standing, so a second round pays the cheapest real price to finish
+    the job. Pinned here because a single-pass repair looks better on cost
+    while shipping a sequence that is still hypermutable.
     """
     from modules.shared_functions_and_vars import nt_to_aa, translate
 
-    result, weights, window = _repair_with_weights({
+    weight_profile = {
         "CGC": 0.95, "CGT": 0.80, "CGA": 0.40, "CGG": 0.30, "AGA": 0.20, "AGG": 0.10,
         "GCG": 0.95, "GCA": 0.80, "GCC": 0.40, "GCT": 0.20,
-    })
+    }
+    result, weights, window = _repair_with_weights(weight_profile)
 
     assert translate(REPEAT_SEQUENCE) == translate(result.sequence_after)
     assert "GCGCGCGC" not in result.sequence_after, "the repeat must be broken"
+    assert result.residual_regions == [], "the sequence must come back genuinely clean"
+    assert result.rounds > 1, "the free break alone does not clear the site"
 
-    # Both codons of the planted repeat are DCUB's optimum and must survive.
-    for start in (30, 33):
-        before, after, _ = _codon_cost(weights, REPEAT_SEQUENCE, result.sequence_after, start)
-        amino_acid = nt_to_aa[before]
-        assert weights[amino_acid][before] == pytest.approx(1.0)
-        assert after == before, f"gave up a preferred codon at {start}"
+    # The free break is taken: Val at 27 is the tied codon, and it changes.
+    free_before, free_after, free_cost = _codon_cost(
+        weights, REPEAT_SEQUENCE, result.sequence_after, 27
+    )
+    assert free_after != free_before
+    assert free_cost == pytest.approx(0.0)
 
-    # Whatever did change cost nothing.
+    # The one concession beyond it is the cheapest available: Arg's runner-up
+    # at 0.031, not Ala's at 0.040 - Ala keeps DCUB's optimum.
+    ala_before, ala_after, _ = _codon_cost(
+        weights, REPEAT_SEQUENCE, result.sequence_after, 33
+    )
+    assert weights[nt_to_aa[ala_before]][ala_before] == pytest.approx(1.0)
+    assert ala_after == ala_before, "gave up the more expensive codon"
+
     total_cost = sum(
         _codon_cost(weights, REPEAT_SEQUENCE, result.sequence_after, start)[2]
         for start in window
     )
-    assert total_cost == pytest.approx(0.0)
+    assert total_cost == pytest.approx(0.031, abs=0.005)
 
 
 def test_when_no_free_break_exists_repair_gives_up_the_least_it_can():

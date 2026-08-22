@@ -253,6 +253,7 @@ def run_hotspot_avoidance(
                 optimization_cub_index=optimization_cub_index,
                 skipped_codons_num=skipped_codons_num,
                 run_summary=run_summary,
+                compute_motifs=module_input.enable_motif_detection,
             )
             # Same validation every other module's output goes through.
             validate_module_output(

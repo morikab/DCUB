@@ -184,6 +184,9 @@ class ModuleInput:
     initiation_optimization_method: InitiationOptimizationMethod = InitiationOptimizationMethod.original
     evaluation_score: EvaluationScore = EvaluationScore.average_distance
     enable_hotspot_avoidance: bool = False
+    # None means "whatever HOTSPOT_AVOIDANCE.COMPUTE_MOTIFS says in
+    # configuration.yaml" - the request only overrides it when it says so.
+    enable_motif_detection: typing.Optional[bool] = None
 
     @property
     def summary(self) -> typing.Dict[str, typing.Any]:
@@ -195,6 +198,7 @@ class ModuleInput:
             "initiation_optimization_method": self.initiation_optimization_method.value,
             "evaluation_score": self.evaluation_score.value,
             "enable_hotspot_avoidance": self.enable_hotspot_avoidance,
+            "enable_motif_detection": self.enable_motif_detection,
             "organisms": [organism.summary for organism in self.organisms],
         }
 
@@ -276,4 +280,5 @@ class UserInput(BaseModel):
     output_path: str
     evaluation_score_type: EvaluationScore = Field(..., alias="evaluation_score")
     enable_hotspot_avoidance: bool = False
+    enable_motif_detection: Optional[bool] = None
 

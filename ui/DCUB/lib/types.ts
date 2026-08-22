@@ -66,6 +66,13 @@ export interface HotspotAvoidanceResult {
   num_edits: number
   detected_sites: { recombination: number; slippage: number; motifs: number }
   detected_regions: HotspotRegion[]
+  /** How many detect-repair rounds ran. Repair re-detects on its own output
+   *  and retries, so this is 1 for a site cleared on the first attempt. */
+  rounds: number
+  /** Sites the final verification pass STILL found, in sequence_after
+   *  coordinates. Non-empty means the shipped sequence is not fully clean;
+   *  the same fact is spelled out in `warnings`. */
+  residual_regions: HotspotRegion[]
   warnings: string[]
 }
 
@@ -115,6 +122,8 @@ export interface RawOptimizationResponse {
       motifs?: number
     }
     detected_regions?: Array<{ kind: HotspotKind; start: number; end: number }>
+    rounds?: number
+    residual_regions?: Array<{ kind: HotspotKind; start: number; end: number }>
     warnings?: string[]
   }
 }

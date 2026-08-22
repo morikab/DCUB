@@ -17,6 +17,7 @@ interface OptimizationState {
   optimizationMethod: string
   cubIndex: string
   enableHotspotAvoidance: boolean
+  enableMotifDetection: boolean
 
   // Actions
   setDnaSequence: (sequence: string) => void
@@ -35,6 +36,7 @@ interface OptimizationState {
   setOptimizationMethod: (method: string) => void
   setCubIndex: (index: string) => void
   setEnableHotspotAvoidance: (enabled: boolean) => void
+  setEnableMotifDetection: (enabled: boolean) => void
 
   reset: () => void
 }
@@ -49,6 +51,7 @@ const initialState = {
   optimizationMethod: "single_codon_diff",
   cubIndex: "CAI",
   enableHotspotAvoidance: false,
+  enableMotifDetection: false,
 }
 
 export const useOptimizationStore = create<OptimizationState>()(
@@ -94,6 +97,7 @@ export const useOptimizationStore = create<OptimizationState>()(
       setOptimizationMethod: (method) => set({ optimizationMethod: method }),
       setCubIndex: (index) => set({ cubIndex: index }),
       setEnableHotspotAvoidance: (enabled) => set({ enableHotspotAvoidance: enabled }),
+      setEnableMotifDetection: (enabled) => set({ enableMotifDetection: enabled }),
 
       reset: () => set(initialState),
     }),
@@ -107,6 +111,7 @@ export const useOptimizationStore = create<OptimizationState>()(
         optimizationMethod: state.optimizationMethod,
         cubIndex: state.cubIndex,
         enableHotspotAvoidance: state.enableHotspotAvoidance,
+        enableMotifDetection: state.enableMotifDetection,
       }),
     },
   ),

@@ -101,6 +101,7 @@ export default function DNAOptimizerPage() {
           output_path: `results/DCUB/${Date.now()}`,
           evaluation_score: "average_distance",
           enable_hotspot_avoidance: currentState.enableHotspotAvoidance,
+          enable_motif_detection: currentState.enableMotifDetection,
         },
       }
 
@@ -200,6 +201,8 @@ export default function DNAOptimizerPage() {
                 motifs: optimization_result.hotspot_avoidance.detected_sites?.motifs || 0,
               },
               detected_regions: optimization_result.hotspot_avoidance.detected_regions ?? [],
+              rounds: optimization_result.hotspot_avoidance.rounds ?? 0,
+              residual_regions: optimization_result.hotspot_avoidance.residual_regions ?? [],
               warnings: optimization_result.hotspot_avoidance.warnings ?? [],
             }
           : undefined,

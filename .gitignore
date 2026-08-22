@@ -101,3 +101,6 @@ docs/superpowers/
 /*.fasta
 /app/*.fasta
 /app/modules/artifacts/
+# Optimization output written by a local run (output_path defaults to
+# results/DCUB/<timestamp>).
+/results/

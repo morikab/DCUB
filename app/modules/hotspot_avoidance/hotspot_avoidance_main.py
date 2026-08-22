@@ -28,6 +28,7 @@ from modules.hotspot_avoidance.dcub_score_adapter import build_dcub_score_fn
 from modules.hotspot_avoidance.dcub_score_adapter import make_dcub_custom_score  # noqa: F401
 from modules.run_summary import RunSummary
 from modules.hotspot_avoidance.exclusion_regions import build_exclusion_regions
+from modules.hotspot_avoidance.exclusion_regions import hotspot_regions_from_detection
 from modules.hotspot_avoidance.exclusion_regions import labeled_hotspot_regions_from_detection
 from modules.shared_functions_and_vars import nt_to_aa
 from modules.timer import Timer
@@ -40,6 +41,10 @@ config = Configuration.get_config()
 #: something to show a biologist beside genuine "this hotspot could not be
 #: cleared" warnings.
 _ESO_PERFORMANCE_WARNING_FRAGMENT = "re-evaluates score_fn"
+
+#: How many residual windows to name in the give-up warning before
+#: summarising the rest as a count. A gene can end a run with dozens.
+_MAX_RESIDUALS_LISTED = 5
 
 
 @dataclass
@@ -55,6 +60,13 @@ class HotspotPatchResult:
     #: but they mark what was DETECTED, which is not the same as what was
     #: edited: a window too narrow to disrupt is reported here and left alone.
     detected_regions: typing.List[typing.Dict[str, typing.Any]] = field(default_factory=list)
+    #: How many repair rounds actually ran (0 when nothing was detected).
+    rounds: int = 0
+    #: Windows the verification pass still reported after the LAST round, in
+    #: sequence_after coordinates. Empty means the final sequence came back
+    #: clean; anything here is a site repair could not break, and is also
+    #: surfaced in `warnings` so it reaches the results screen.
+    residual_regions: typing.List[typing.Dict[str, typing.Any]] = field(default_factory=list)
 
     @property
     def summary(self) -> typing.Dict[str, typing.Any]:
@@ -65,6 +77,8 @@ class HotspotPatchResult:
             "num_edits": self.num_edits,
             "detected_sites": self.detected_sites,
             "detected_regions": self.detected_regions,
+            "rounds": self.rounds,
+            "residual_regions": self.residual_regions,
             "warnings": self.warnings,
         }
 
@@ -242,6 +256,102 @@ def _chunks_outside_detected_windows(
     return problems
 
 
+def _repair_round(
+    sequence: str,
+    detection: typing.Mapping[str, typing.Any],
+    score_fn: typing.Callable[[str], float],
+    skipped_codons_num: int,
+    padding_codons: int,
+) -> typing.Tuple[str, typing.List[str]]:
+    """One repair pass: lock everything outside `detection`'s windows, hand the
+    windows to ESO as AvoidPattern constraints, return the patched sequence and
+    whatever warnings it produced.
+
+    `detection` must have been produced from `sequence` itself - the patterns
+    ESO avoids are literal substrings at literal coordinates, so a detection
+    taken from an earlier round's sequence would target strings that are no
+    longer there.
+    """
+    exclusion_regions = build_exclusion_regions(
+        hotspot_regions=hotspot_regions_from_detection(detection),
+        sequence_length=len(sequence),
+        locked_prefix_length=skipped_codons_num * 3,
+        padding_codons=padding_codons,
+    )
+
+    # Detection counts stay as DETECTED; widening only changes how the same
+    # nucleotides are handed to DNAChisel for avoidance.
+    df_slippage, slippage_warnings = widen_slippage_base_units(
+        detection.get("df_slippage"),
+        sequence,
+    )
+    # Guard the ESO-revision assumption widen_slippage_base_units makes.
+    # Cheap - the frame holds one row per detected site - and it turns an
+    # ESO upgrade that breaks the assumption into a message naming the
+    # cause, rather than a spray of dropped-constraint warnings.
+    if df_slippage is not None and not df_slippage.empty:
+        detected_windows = {
+            index: (int(row["start"]), int(row["end"]))
+            for index, row in enumerate(
+                detection["df_slippage"].to_dict("records")
+            )
+        }
+        slippage_warnings.extend(
+            _chunks_outside_detected_windows(df_slippage, detected_windows)
+        )
+
+    with warnings.catch_warnings(record=True) as caught_warnings:
+        warnings.simplefilter("always")
+        final_sequence, _objectives_summary, _num_edits = optimization_engine(
+            sequence,
+            # DCUB does not manage GC content, and with everything outside
+            # the hotspots locked, an out-of-range window is unfixable -
+            # ESO's retry loop would drop the constraint and emit a warning
+            # that means nothing to the user. Disable it outright.
+            mini_gc=0.0,
+            maxi_gc=1.0,
+            custom_score_fn=score_fn,
+            custom_score_minimize=False,
+            df_recombination=detection.get("df_recombination"),
+            df_slippage=df_slippage,
+            df_motifs=detection.get("df_motifs"),
+            # Pass the ORF explicitly: optimization_engine's own default is
+            # ((len(seq) - 1) // 3) * 3, which drops the final codon of a
+            # length-multiple-of-3 sequence (300 -> 297). DCUB sequences are
+            # always whole codons.
+            orf_regions=[(0, len(sequence))],
+            exclusion_regions=exclusion_regions,
+        )
+
+    round_warnings = slippage_warnings + [
+        str(warning.message)
+        for warning in caught_warnings
+        if _ESO_PERFORMANCE_WARNING_FRAGMENT not in str(warning.message)
+    ]
+    return final_sequence, round_warnings
+
+
+def _describe_residual_regions(
+    residual_regions: typing.List[typing.Dict[str, typing.Any]],
+    rounds: int,
+) -> str:
+    """The warning shown when repair ran out of rounds with sites still
+    standing. Positions are 1-indexed and inclusive, matching how the results
+    screen lists them and how a biologist reads a position."""
+    listed = ", ".join(
+        f"{region['kind']} {region['start'] + 1}-{region['end']}"
+        for region in residual_regions[:_MAX_RESIDUALS_LISTED]
+    )
+    if len(residual_regions) > _MAX_RESIDUALS_LISTED:
+        listed += f", and {len(residual_regions) - _MAX_RESIDUALS_LISTED} more"
+    return (
+        f"{len(residual_regions)} hypermutable site(s) still detected after "
+        f"{rounds} repair round(s): {listed}. Raise "
+        f"HOTSPOT_AVOIDANCE.MAX_REPAIR_ROUNDS in app/modules/configuration.yaml "
+        f"to allow more attempts."
+    )
+
+
 def patch_sequence(
     sequence: str,
     skipped_codons_num: int,
@@ -251,12 +361,23 @@ def patch_sequence(
     common_motifs: typing.Optional[typing.List[str]] = None,
     recombination_mode: typing.Optional[str] = None,
     slippage_mode: typing.Optional[str] = None,
+    max_rounds: typing.Optional[int] = None,
 ) -> HotspotPatchResult:
     """Detect hotspots in `sequence` and repair them without touching anything
     else. Returns the patched sequence plus everything the run summary reports.
 
-    `compute_motifs`, `common_motifs`, `recombination_mode` and
-    `slippage_mode` default to `app/modules/configuration.yaml`'s
+    Repair is ITERATIVE: every round is followed by a fresh detection pass on
+    the round's own output, and another round runs if anything is still
+    standing, up to `max_rounds` attempts. Neither ESO nor a single round
+    verifies its own work - ESO's AvoidPattern constraints guarantee the exact
+    detected string is gone from the exact detected window, which is not the
+    same as the window having stopped being hypermutable. Each retry also
+    unlocks one more codon on each side of every window (see
+    `build_exclusion_regions`), because the commonest survivor is a repeat
+    whose remaining copy sits just outside the previous round's reach.
+
+    `compute_motifs`, `common_motifs`, `recombination_mode`, `slippage_mode`
+    and `max_rounds` default to `app/modules/configuration.yaml`'s
     `HOTSPOT_AVOIDANCE` section when not supplied. The config is read here,
     inside the function body, rather than as a signature default - a
     signature default is evaluated once at import time and can never be
@@ -277,6 +398,12 @@ def patch_sequence(
         compute_motifs = hotspot_config["COMPUTE_MOTIFS"]
     if common_motifs is None:
         common_motifs = hotspot_config["COMMON_MOTIFS"]
+    if max_rounds is None:
+        max_rounds = hotspot_config["MAX_REPAIR_ROUNDS"]
+    # A round count below 1 would skip repair altogether while still reporting
+    # detected sites - silently doing nothing is the one outcome worth ruling
+    # out here, so floor it at a single pass.
+    max_rounds = max(1, int(max_rounds))
 
     with Timer() as timer:
         # Detector modes are omitted unless explicitly overridden, so ESO's own
@@ -304,13 +431,16 @@ def patch_sequence(
                     "(e.g. [\"dam\", \"dcm\"]), or set COMPUTE_MOTIFS to False."
                 )
             extractor_kwargs["common_motifs"] = list(common_motifs)
-        detection = suspect_site_extractor(
-            sequence,
-            compute_motifs=compute_motifs,
-            num_sites=np.inf,
-            **extractor_kwargs,
-        )
 
+        def detect(target_sequence: str) -> typing.Dict[str, typing.Any]:
+            return suspect_site_extractor(
+                target_sequence,
+                compute_motifs=compute_motifs,
+                num_sites=np.inf,
+                **extractor_kwargs,
+            )
+
+        detection = detect(sequence)
         detected_sites = {
             "recombination": int(len(detection.get("df_recombination", []))),
             "slippage": int(len(detection.get("df_slippage", []))),
@@ -318,11 +448,12 @@ def patch_sequence(
         }
         logger.info(f"Detected hypermutable sites: {detected_sites}")
 
+        # What the FIRST detection found, in sequence_before coordinates - this
+        # is what the results screen highlights. Sites that only appear in a
+        # later round are consequences of repair, not properties of the
+        # incoming sequence, and are reported as residuals instead.
         detected_regions = labeled_hotspot_regions_from_detection(detection)
-        hotspot_regions = sorted(
-            (region["start"], region["end"]) for region in detected_regions
-        )
-        if not hotspot_regions:
+        if not detected_regions:
             return HotspotPatchResult(
                 sequence_before=sequence,
                 sequence_after=sequence,
@@ -330,74 +461,70 @@ def patch_sequence(
                 detected_sites=detected_sites,
                 warnings=[],
                 detected_regions=detected_regions,
+                rounds=0,
+                residual_regions=[],
             )
 
-        exclusion_regions = build_exclusion_regions(
-            hotspot_regions=hotspot_regions,
-            sequence_length=len(sequence),
-            locked_prefix_length=skipped_codons_num * 3,
-        )
+        current_sequence = sequence
+        collected_warnings: typing.List[str] = []
+        residual_regions = detected_regions
+        rounds = 0
+        for round_index in range(max_rounds):
+            current_sequence, round_warnings = _repair_round(
+                sequence=current_sequence,
+                detection=detection,
+                score_fn=score_fn,
+                skipped_codons_num=skipped_codons_num,
+                # Round 0 keeps the tight, hotspot-only window; each retry
+                # unlocks one more codon on each side.
+                padding_codons=round_index,
+            )
+            collected_warnings.extend(round_warnings)
+            rounds += 1
 
-        # Detection counts above stay as DETECTED; widening only changes how the
-        # same nucleotides are handed to DNAChisel for avoidance.
-        df_slippage, slippage_warnings = widen_slippage_base_units(
-            detection.get("df_slippage"),
-            sequence,
-        )
-        # Guard the ESO-revision assumption widen_slippage_base_units makes.
-        # Cheap - the frame holds one row per detected site - and it turns an
-        # ESO upgrade that breaks the assumption into a message naming the
-        # cause, rather than a spray of dropped-constraint warnings.
-        if df_slippage is not None and not df_slippage.empty:
-            detected_windows = {
-                index: (int(row["start"]), int(row["end"]))
-                for index, row in enumerate(
-                    detection["df_slippage"].to_dict("records")
-                )
-            }
-            slippage_warnings.extend(
-                _chunks_outside_detected_windows(df_slippage, detected_windows)
+            # The verification pass. It runs even on the last round, so a
+            # sequence that ships with sites still in it says so.
+            detection = detect(current_sequence)
+            residual_regions = labeled_hotspot_regions_from_detection(detection)
+            if not residual_regions:
+                break
+            logger.info(
+                f"Repair round {rounds} left {len(residual_regions)} site(s) standing; "
+                f"retrying with {round_index + 1} codon(s) of padding"
+                if rounds < max_rounds
+                else f"Repair round {rounds} left {len(residual_regions)} site(s) standing"
             )
 
-        with warnings.catch_warnings(record=True) as caught_warnings:
-            warnings.simplefilter("always")
-            final_sequence, _objectives_summary, num_edits = optimization_engine(
-                sequence,
-                # DCUB does not manage GC content, and with everything outside
-                # the hotspots locked, an out-of-range window is unfixable -
-                # ESO's retry loop would drop the constraint and emit a warning
-                # that means nothing to the user. Disable it outright.
-                mini_gc=0.0,
-                maxi_gc=1.0,
-                custom_score_fn=score_fn,
-                custom_score_minimize=False,
-                df_recombination=detection.get("df_recombination"),
-                df_slippage=df_slippage,
-                df_motifs=detection.get("df_motifs"),
-                # Pass the ORF explicitly: optimization_engine's own default is
-                # ((len(seq) - 1) // 3) * 3, which drops the final codon of a
-                # length-multiple-of-3 sequence (300 -> 297). DCUB sequences are
-                # always whole codons.
-                orf_regions=[(0, len(sequence))],
-                exclusion_regions=exclusion_regions,
+        if residual_regions:
+            collected_warnings.append(
+                _describe_residual_regions(residual_regions, rounds)
             )
 
-        surfaced_warnings = slippage_warnings + [
-            str(warning.message)
-            for warning in caught_warnings
-            if _ESO_PERFORMANCE_WARNING_FRAGMENT not in str(warning.message)
-        ]
+        # Rounds repeat the same constraints, so the same message can arrive
+        # several times; keep first occurrences only, in order.
+        surfaced_warnings = list(dict.fromkeys(collected_warnings))
         for warning_message in surfaced_warnings:
             logger.warning(f"ESO hotspot avoidance: {warning_message}")
 
-    logger.info(f"Hotspot avoidance made {num_edits} edits in {timer.elapsed_time}")
+    # Counted against the ORIGINAL sequence rather than summed over rounds:
+    # repair is synonymous and length-preserving, so this is an exact
+    # position-wise diff, and a position edited in two rounds counts once.
+    num_edits = sum(
+        1 for before, after in zip(sequence, current_sequence) if before != after
+    )
+    logger.info(
+        f"Hotspot avoidance made {num_edits} edits over {rounds} round(s) "
+        f"in {timer.elapsed_time}"
+    )
     return HotspotPatchResult(
         sequence_before=sequence,
-        sequence_after=final_sequence,
-        num_edits=int(num_edits),
+        sequence_after=current_sequence,
+        num_edits=num_edits,
         detected_sites=detected_sites,
         warnings=surfaced_warnings,
         detected_regions=detected_regions,
+        rounds=rounds,
+        residual_regions=residual_regions,
     )
 
 
@@ -413,6 +540,7 @@ class HotspotAvoidanceModule(object):
         common_motifs: typing.Optional[typing.List[str]] = None,
         recombination_mode: typing.Optional[str] = None,
         slippage_mode: typing.Optional[str] = None,
+        max_rounds: typing.Optional[int] = None,
     ) -> HotspotPatchResult:
         score_fn = build_dcub_score_fn(
             module_input=module_input,
@@ -429,4 +557,5 @@ class HotspotAvoidanceModule(object):
             common_motifs=common_motifs,
             recombination_mode=recombination_mode,
             slippage_mode=slippage_mode,
+            max_rounds=max_rounds,
         )

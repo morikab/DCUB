@@ -160,3 +160,30 @@ class TestBuildExclusionRegions:
 
     def test_hotspot_covering_everything_leaves_nothing_locked(self):
         assert build_exclusion_regions([(0, 30)], sequence_length=30) == []
+
+    def test_padding_unlocks_whole_codons_on_each_side(self):
+        # (4, 8) widens to (3, 9); one codon of padding reaches (0, 12).
+        assert build_exclusion_regions([(4, 8)], sequence_length=90, padding_codons=1) == [(12, 90)]
+        assert build_exclusion_regions([(30, 36)], sequence_length=90, padding_codons=1) == [
+            (0, 27),
+            (39, 90),
+        ]
+        assert build_exclusion_regions([(30, 36)], sequence_length=90, padding_codons=2) == [
+            (0, 24),
+            (42, 90),
+        ]
+
+    def test_padding_is_clipped_at_both_ends_of_the_sequence(self):
+        """Padding runs off the sequence for a hotspot near either end. The
+        window is clipped rather than producing a negative start or an end past
+        the last nucleotide, either of which DNAChisel would reject."""
+        assert build_exclusion_regions([(0, 6)], sequence_length=30, padding_codons=3) == [(15, 30)]
+        assert build_exclusion_regions([(24, 30)], sequence_length=30, padding_codons=3) == [(0, 15)]
+
+    def test_padding_never_reaches_into_the_locked_prefix(self):
+        """The initiation-optimized prefix outranks padding: widening the repair
+        window must not start editing codons the initiation module chose."""
+        regions = build_exclusion_regions(
+            [(48, 54)], sequence_length=90, locked_prefix_length=45, padding_codons=5
+        )
+        assert regions == [(0, 45), (69, 90)]

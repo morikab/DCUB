@@ -325,6 +325,8 @@ class TestPatchSequence:
             "num_edits",
             "detected_sites",
             "detected_regions",
+            "rounds",
+            "residual_regions",
             "warnings",
         }
 
@@ -429,10 +431,16 @@ class TestDetectedRegions:
 
         # Detected - and still reported as such even though it was not repaired.
         assert result.detected_sites["slippage"] == 1
-        assert result.warnings == [
+        assert result.warnings[0] == (
             "Slippage site at 30-34 (base unit 2nt) is too short to disrupt at "
             "codon resolution and was left unmodified."
-        ]
+        )
+        # The site is unrepairable, so every round leaves it standing and the
+        # verification pass reports it as residual rather than letting the run
+        # claim a clean sequence. The message is emitted once, not per round.
+        assert len(result.warnings) == 2
+        assert "still detected after" in result.warnings[1]
+        assert result.residual_regions == [{"kind": "slippage", "start": 30, "end": 34}]
         assert result.sequence_after == sequence
         assert result.num_edits == 0
 
@@ -487,6 +495,158 @@ class TestDetectedRegions:
             skipped_codons_num=0,
         )
         assert not any("re-evaluates score_fn" in warning for warning in result.warnings)
+
+
+class TestIterativeRepair:
+    """Repair verifies its own output and retries.
+
+    ESO's AvoidPattern constraints guarantee the detected string is gone from
+    the detected window - not that the window stopped being hypermutable. The
+    survivor seen in practice is a shifted copy of the same repeat: measured on
+    mCherry, clearing `CGCGCG` at [660, 666) left the identical CG repeat at
+    [659, 665), because the nucleotide holding it up sat in the neighbouring,
+    locked codon.
+    """
+
+    def test_a_repaired_sequence_is_re_detected_before_being_returned(self, monkeypatch):
+        from modules.hotspot_avoidance import hotspot_avoidance_main
+
+        sequences_scanned = []
+
+        def fake_extractor(target_seq, compute_motifs, num_sites, **kwargs):
+            sequences_scanned.append(target_seq)
+            # Clean on the second look, so exactly one round runs.
+            if len(sequences_scanned) > 1:
+                return {"df_recombination": pd.DataFrame(), "df_slippage": pd.DataFrame()}
+            return {
+                "df_recombination": pd.DataFrame(),
+                "df_slippage": _slippage_df([30, 36, 2, "CGCGCG", 3, -4.56]),
+            }
+
+        monkeypatch.setattr(
+            hotspot_avoidance_main, "suspect_site_extractor", fake_extractor
+        )
+
+        sequence = PLANTED_PREFIX + "CGCGCG" + PLANTED_SUFFIX
+        result = patch_sequence(
+            sequence=sequence,
+            codon_table=_flat_codon_table(),
+            skipped_codons_num=0,
+        )
+
+        assert len(sequences_scanned) == 2, "detection must run again after repair"
+        assert sequences_scanned[0] == sequence
+        assert sequences_scanned[1] == result.sequence_after
+        assert result.rounds == 1
+        assert result.residual_regions == []
+        assert result.warnings == []
+
+    def test_a_site_that_survives_repair_triggers_another_round(self, monkeypatch):
+        """And each retry unlocks one more codon on each side, so a later round
+        can reach a nucleotide the previous one had locked."""
+        from modules.hotspot_avoidance import hotspot_avoidance_main
+
+        paddings = []
+        real_build = hotspot_avoidance_main.build_exclusion_regions
+
+        def spy_build(*args, **kwargs):
+            paddings.append(kwargs.get("padding_codons", 0))
+            return real_build(*args, **kwargs)
+
+        monkeypatch.setattr(
+            hotspot_avoidance_main, "build_exclusion_regions", spy_build
+        )
+        # A site the repair can never clear: detection reports it unchanged
+        # every time, so the loop runs to its limit.
+        monkeypatch.setattr(
+            hotspot_avoidance_main,
+            "suspect_site_extractor",
+            lambda target_seq, compute_motifs, num_sites, **kwargs: {
+                "df_recombination": pd.DataFrame(),
+                "df_slippage": _slippage_df([30, 36, 2, "CGCGCG", 3, -4.56]),
+            },
+        )
+
+        result = patch_sequence(
+            sequence=PLANTED_PREFIX + "CGCGCG" + PLANTED_SUFFIX,
+            codon_table=_flat_codon_table(),
+            skipped_codons_num=0,
+            max_rounds=4,
+        )
+
+        assert result.rounds == 4
+        assert paddings == [0, 1, 2, 3], "each retry widens the window by one codon"
+        assert result.residual_regions, "an unclearable site must be reported, not hidden"
+        assert "still detected after 4 repair round(s)" in result.warnings[-1]
+
+    def test_max_rounds_comes_from_the_config_when_not_passed(self, monkeypatch):
+        from modules.hotspot_avoidance import hotspot_avoidance_main
+
+        rounds_run = []
+        monkeypatch.setattr(
+            hotspot_avoidance_main,
+            "suspect_site_extractor",
+            lambda target_seq, compute_motifs, num_sites, **kwargs: (
+                rounds_run.append(target_seq),
+                {
+                    "df_recombination": pd.DataFrame(),
+                    "df_slippage": _slippage_df([30, 36, 2, "CGCGCG", 3, -4.56]),
+                },
+            )[1],
+        )
+        monkeypatch.setitem(
+            hotspot_avoidance_main.config["HOTSPOT_AVOIDANCE"], "MAX_REPAIR_ROUNDS", 2
+        )
+
+        result = patch_sequence(
+            sequence=PLANTED_PREFIX + "CGCGCG" + PLANTED_SUFFIX,
+            codon_table=_flat_codon_table(),
+            skipped_codons_num=0,
+        )
+        assert result.rounds == 2
+
+    def test_a_round_count_below_one_still_runs_a_single_pass(self, monkeypatch):
+        """Floored rather than honoured: a 0 in the config would otherwise
+        report detected sites while silently repairing nothing."""
+        from modules.hotspot_avoidance import hotspot_avoidance_main
+
+        monkeypatch.setitem(
+            hotspot_avoidance_main.config["HOTSPOT_AVOIDANCE"], "MAX_REPAIR_ROUNDS", 0
+        )
+        result = patch_sequence(
+            sequence=PLANTED_PREFIX + "CGCGCG" + PLANTED_SUFFIX,
+            codon_table=_flat_codon_table(),
+            skipped_codons_num=0,
+        )
+        assert result.rounds == 1
+        assert result.num_edits > 0
+
+    def test_a_clean_sequence_never_enters_the_loop(self):
+        result = patch_sequence(
+            sequence=CLEAN_SEQUENCE,
+            codon_table=_flat_codon_table(),
+            skipped_codons_num=0,
+        )
+        assert result.rounds == 0
+        assert result.residual_regions == []
+        assert result.num_edits == 0
+
+    def test_num_edits_counts_positions_against_the_original_sequence(self, monkeypatch):
+        """Not a sum over rounds: a position edited in round 0 and again in
+        round 1 is one changed nucleotide in the sequence that ships."""
+        from modules.hotspot_avoidance import hotspot_avoidance_main
+
+        result = patch_sequence(
+            sequence=PLANTED_PREFIX + "CGCGCG" + PLANTED_SUFFIX,
+            codon_table=_flat_codon_table(),
+            skipped_codons_num=0,
+        )
+        changed = sum(
+            1
+            for before, after in zip(result.sequence_before, result.sequence_after)
+            if before != after
+        )
+        assert result.num_edits == changed
 
 
 class TestDetectionConfiguration:
@@ -622,6 +782,29 @@ class TestDetectionConfiguration:
 
         assert "recombination_mode" not in captured["_keys"]
         assert "slippage_mode" not in captured["_keys"]
+
+    def test_shipped_config_enables_every_bundled_eso_motif(self):
+        """The UI switch is presented as "detect ESO's motifs", so the shipped
+        list is ESO's full bundled set - the two methylation motifs plus the
+        three regulatory ones. Names are also checked against ESO's registry:
+        load_common_motifs raises on an unknown key, and a typo here would
+        otherwise only surface mid-run, after optimization already started."""
+        from eso.detection.common_motifs import COMMON_MOTIFS as ESO_BUNDLED_MOTIFS
+        from eso.detection.common_motifs import load_common_motifs
+        from modules.hotspot_avoidance import hotspot_avoidance_main
+
+        configured = hotspot_avoidance_main.config["HOTSPOT_AVOIDANCE"]["COMMON_MOTIFS"]
+        assert set(configured) == {
+            "dam",
+            "dcm",
+            "shine_dalgarno",
+            "sigma70_minus35",
+            "sigma70_minus10",
+        }
+        # Same set ESO bundles: if a future ESO adds a motif, this fails rather
+        # than silently shipping a narrower list than the UI copy promises.
+        assert set(configured) == set(ESO_BUNDLED_MOTIFS)
+        assert len(load_common_motifs(configured)) == len(configured)
 
     def test_enabling_motifs_without_configuring_any_is_rejected(self, monkeypatch):
         """COMMON_MOTIFS is NOT redundant with ESO's default. ESO guards with
