@@ -14,7 +14,7 @@ import { AdvancedOptionsPanel } from "@/components/advanced-options-panel"
 import { LoadingScreen } from "@/components/loading-screen"
 import { ResultsScreen } from "@/components/results-screen"
 import { ErrorDialog } from "@/components/error-dialog"
-import type { OptimizationResult } from "@/lib/types"
+import type { OptimizationResult, OrganismRequestPayload, RawOptimizationResponse } from "@/lib/types"
 
 export default function DNAOptimizerPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -57,7 +57,7 @@ export default function DNAOptimizerPage() {
       const currentState = useOptimizationStore.getState()
 
       // Prepare organisms object in the new format
-      const organismsObject: Record<string, any> = {}
+      const organismsObject: Record<string, OrganismRequestPayload> = {}
 
       // Add wanted organisms (optimized: true)
       wantedOrganisms.forEach((org) => {
@@ -100,6 +100,8 @@ export default function DNAOptimizerPage() {
           initiation_optimization_method: "original",
           output_path: `results/DCUB/${Date.now()}`,
           evaluation_score: "average_distance",
+          enable_hotspot_avoidance: currentState.enableHotspotAvoidance,
+          enable_motif_detection: currentState.enableMotifDetection,
         },
       }
 
@@ -158,7 +160,7 @@ export default function DNAOptimizerPage() {
   }
 
   // Helper function to parse optimization response
-  const parseOptimizationResponse = (optimization_result: any): OptimizationResult => {
+  const parseOptimizationResponse = (optimization_result: RawOptimizationResponse): OptimizationResult => {
     console.info(optimization_result.final_evaluation)
     try {
       return {
@@ -182,11 +184,28 @@ export default function DNAOptimizerPage() {
         },
         processing_time: optimization_result.processing_time || 0,
         timestamp: optimization_result.timestamp || new Date().toISOString(),
-        organisms_dist_scores: (optimization_result.final_evaluation?.organisms_dist_scores ?? []).map((o: any) => ({
+        organisms_dist_scores: (optimization_result.final_evaluation?.organisms_dist_scores ?? []).map((o) => ({
           name: o.name,
           is_wanted: o.is_wanted,
           dist_score: o.dist_score,
         })),
+        hotspot_avoidance: optimization_result.hotspot_avoidance
+          ? {
+              enabled: optimization_result.hotspot_avoidance.enabled ?? false,
+              sequence_before: optimization_result.hotspot_avoidance.sequence_before || "",
+              sequence_after: optimization_result.hotspot_avoidance.sequence_after || "",
+              num_edits: optimization_result.hotspot_avoidance.num_edits || 0,
+              detected_sites: {
+                recombination: optimization_result.hotspot_avoidance.detected_sites?.recombination || 0,
+                slippage: optimization_result.hotspot_avoidance.detected_sites?.slippage || 0,
+                motifs: optimization_result.hotspot_avoidance.detected_sites?.motifs || 0,
+              },
+              detected_regions: optimization_result.hotspot_avoidance.detected_regions ?? [],
+              rounds: optimization_result.hotspot_avoidance.rounds ?? 0,
+              residual_regions: optimization_result.hotspot_avoidance.residual_regions ?? [],
+              warnings: optimization_result.hotspot_avoidance.warnings ?? [],
+            }
+          : undefined,
       }
     } catch (error) {
       console.error("Error parsing response:", error)

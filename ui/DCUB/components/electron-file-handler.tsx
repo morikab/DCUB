@@ -41,7 +41,15 @@ export function ElectronFileHandler({
 
       const result = await handleElectronFileOperation("select-file", { filters })
 
-      if (result?.success && !result.canceled) {
+      // Only the "picked a file" reply carries these three - a cancelled or
+      // failed operation comes back as success:false with none of them.
+      if (
+        result?.success &&
+        !result.canceled &&
+        result.fileName &&
+        result.filePath &&
+        result.content !== undefined
+      ) {
         onFileSelect?.({
           name: result.fileName,
           content: result.content,

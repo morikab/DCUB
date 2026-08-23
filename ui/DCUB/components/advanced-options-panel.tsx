@@ -11,14 +11,27 @@ import { X, Settings, Info } from "lucide-react"
 import { useOptimizationStore } from "@/lib/store"
 import { cn } from "@/lib/utils"
 
+const ESO_PAPER_URL =
+  "https://pubs.acs.org/asbcd6/article/11/3/1142/814406/Evolutionary-Stability-Optimizer-ESO-A-Novel"
+
 interface AdvancedOptionsPanelProps {
   isOpen: boolean
   onClose: () => void
 }
 
 export function AdvancedOptionsPanel({ isOpen, onClose }: AdvancedOptionsPanelProps) {
-  const { tuningParameter, optimizationMethod, cubIndex, setTuningParameter, setOptimizationMethod, setCubIndex } =
-    useOptimizationStore()
+  const {
+    tuningParameter,
+    optimizationMethod,
+    cubIndex,
+    enableHotspotAvoidance,
+    enableMotifDetection,
+    setTuningParameter,
+    setOptimizationMethod,
+    setCubIndex,
+    setEnableHotspotAvoidance,
+    setEnableMotifDetection,
+  } = useOptimizationStore()
 
   const [localTuningParameter, setLocalTuningParameter] = useState([tuningParameter])
 
@@ -34,16 +47,25 @@ export function AdvancedOptionsPanel({ isOpen, onClose }: AdvancedOptionsPanelPr
   const optimizationMethods = [
     { value: "single_codon_diff", label: "Single Codon Diff" },
     { value: "single_codon_ratio", label: "Single Codon Ratio" },
-    { value: "zscore_bulk_diff", label: "Z-Score Bulk Diff" },
-    { value: "zscore_bulk_ratio", label: "Z-Score Bulk Ratio" },
-    { value: "zscore_single_diff", label: "Z-Score Single Diff" },
-    { value: "zscore_single_ratio", label: "Z-Score Single Ratio" },
+    { value: "single_codon_weakest_link", label: "Single Codon Weakest Link" },
+    // These strings are sent verbatim as orf_optimization_method and must be
+    // ORFOptimizationMethod values (app/modules/models.py). The four Z-Score
+    // ones carry an _aa_ segment; without it the request is rejected with a
+    // 422 before any optimization starts.
+    { value: "zscore_bulk_aa_diff", label: "Z-Score Bulk Diff" },
+    { value: "zscore_bulk_aa_ratio", label: "Z-Score Bulk Ratio" },
+    { value: "zscore_bulk_aa_weakest_link", label: "Z-Score Bulk Weakest Link" },
+    { value: "zscore_single_aa_diff", label: "Z-Score Single Diff" },
+    { value: "zscore_single_aa_ratio", label: "Z-Score Single Ratio" },
+    { value: "zscore_single_aa_weakest_link", label: "Z-Score Single Weakest Link" },
   ]
 
   const resetToDefaults = () => {
     setTuningParameter(50)
     setOptimizationMethod("single_codon_diff")
     setCubIndex("CAI")
+    setEnableHotspotAvoidance(false)
+    setEnableMotifDetection(false)
     setLocalTuningParameter([50])
   }
 
@@ -77,11 +99,11 @@ export function AdvancedOptionsPanel({ isOpen, onClose }: AdvancedOptionsPanelPr
             </Button>
           </div>
 
-          {/* Tuning Parameter */}
+          {/* Trade-off Parameter */}
           <Card>
             <CardHeader className="pb-4">
               <CardTitle className="text-base flex items-center gap-2">
-                Tuning Parameter
+                Trade-off Parameter
                 <div className="group relative">
                   <Info className="w-4 h-4 text-gray-400 cursor-help" />
                   <div className="absolute left-6 top-0 w-64 p-2 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity z-10">
@@ -184,6 +206,102 @@ export function AdvancedOptionsPanel({ isOpen, onClose }: AdvancedOptionsPanelPr
             </CardContent>
           </Card>
 
+          {/* Hotspot Avoidance */}
+          <Card>
+            <CardHeader className="pb-4">
+              <CardTitle className="text-base flex items-center gap-2">
+                Hotspot Avoidance
+                <div className="group relative">
+                  <Info className="w-4 h-4 text-gray-400 cursor-help" />
+                  <div className="absolute left-6 top-0 w-64 p-2 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                    Detects hypermutable sites (replication slippage, recombination-mediated deletion) in the
+                    optimized sequence and edits only those sites away. Codon choices everywhere else are locked.
+                    Motif detection is a separate switch below, off by default.
+                  </div>
+                </div>
+              </CardTitle>
+              <CardDescription>Remove hypermutable sites from the optimized sequence</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <RadioGroup
+                value={enableHotspotAvoidance ? "yes" : "no"}
+                onValueChange={(value) => setEnableHotspotAvoidance(value === "yes")}
+                className="space-y-3"
+              >
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="no" id="hotspot-no" />
+                  <Label htmlFor="hotspot-no" className="cursor-pointer">
+                    <div>
+                      <div className="font-medium">Off</div>
+                      <div className="text-sm text-gray-500">Default. No hotspot avoidance.</div>
+                    </div>
+                  </Label>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <RadioGroupItem value="yes" id="hotspot-yes" />
+                  <div>
+                    <Label htmlFor="hotspot-yes" className="cursor-pointer">
+                      <div className="font-medium">On</div>
+                      <div className="text-sm text-gray-500">
+                        Detect and repair hypermutable sites using ESO tool
+                      </div>
+                    </Label>
+                    <a
+                      href={ESO_PAPER_URL}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-blue-600 hover:underline"
+                    >
+                      About ESO
+                    </a>
+                  </div>
+                </div>
+              </RadioGroup>
+
+              {enableHotspotAvoidance && (
+                <div className="mt-5 pt-4 border-t space-y-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium">Motif detection</span>
+                    <div className="group relative">
+                      <Info className="w-4 h-4 text-gray-400 cursor-help" />
+                      <div className="absolute left-6 top-0 w-64 p-2 bg-gray-900 text-white text-xs rounded opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                        Adds ESO&apos;s bundled motifs to the detected sites: the dam and dcm methylation
+                        motifs, plus the Shine-Dalgarno ribosome binding site and the sigma70 -35/-10 promoter
+                        hexamers. ESO scores motifs with a position-weight matrix, so near-matches of a fixed
+                        consensus are reported too. Slippage and recombination detection are unaffected by this
+                        setting.
+                      </div>
+                    </div>
+                  </div>
+                  <RadioGroup
+                    value={enableMotifDetection ? "yes" : "no"}
+                    onValueChange={(value) => setEnableMotifDetection(value === "yes")}
+                    className="space-y-3"
+                  >
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="no" id="motif-no" />
+                      <Label htmlFor="motif-no" className="cursor-pointer">
+                        <div className="font-medium">Off</div>
+                        <div className="text-sm text-gray-500">
+                          Default. Detect slippage and recombination sites only.
+                        </div>
+                      </Label>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <RadioGroupItem value="yes" id="motif-yes" />
+                      <Label htmlFor="motif-yes" className="cursor-pointer">
+                        <div className="font-medium">On</div>
+                        <div className="text-sm text-gray-500">
+                          Also detect ESO&apos;s motifs. Expect many more edits, most of them near-matches.
+                        </div>
+                      </Label>
+                    </div>
+                  </RadioGroup>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           {/* Current Settings Summary */}
           <Card className="bg-blue-50 border-blue-200">
             <CardHeader className="pb-3">
@@ -191,7 +309,7 @@ export function AdvancedOptionsPanel({ isOpen, onClose }: AdvancedOptionsPanelPr
             </CardHeader>
             <CardContent className="text-sm space-y-2">
               <div className="flex justify-between">
-                <span className="text-blue-700">Tuning Parameter:</span>
+                <span className="text-blue-700">Trade-off Parameter:</span>
                 <span className="font-medium text-blue-900">{tuningParameter}</span>
               </div>
               <div className="flex justify-between">
@@ -204,6 +322,16 @@ export function AdvancedOptionsPanel({ isOpen, onClose }: AdvancedOptionsPanelPr
                 <span className="text-blue-700">CUB Index:</span>
                 <span className="font-medium text-blue-900">{cubIndex}</span>
               </div>
+              <div className="flex justify-between">
+                <span className="text-blue-700">Hotspot Avoidance:</span>
+                <span className="font-medium text-blue-900">{enableHotspotAvoidance ? "On" : "Off"}</span>
+              </div>
+              {enableHotspotAvoidance && (
+                <div className="flex justify-between">
+                  <span className="text-blue-700">Motif Detection:</span>
+                  <span className="font-medium text-blue-900">{enableMotifDetection ? "On" : "Off"}</span>
+                </div>
+              )}
             </CardContent>
           </Card>
 

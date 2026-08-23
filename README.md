@@ -84,6 +84,109 @@ If you prefer to build the tool from source (for development or customization), 
 
 ---
 
+## Optimization options
+
+### Hotspot avoidance (optional)
+
+With **Advanced Options → Hotspot Avoidance** set to **On**, DCUB runs
+[ESO](https://github.com/itamar-menuhin/evolutionary-stability-optimizer) over each
+optimized candidate to detect hypermutable sites - replication slippage and
+recombination-mediated deletion, by default - and edits them away.
+
+Replacements inside a detected site are chosen using DCUB's own per-codon
+preference model, so they still reflect the wanted/unwanted-organism tradeoff.
+Every nucleotide outside a detected site is locked, so codon choices elsewhere
+cannot drift.
+
+Repair then **verifies itself**: detection re-runs on the repaired sequence,
+and if anything is still standing another round follows, up to
+`HOTSPOT_AVOIDANCE.MAX_REPAIR_ROUNDS` (default 5) attempts. This is not
+belt-and-braces. ESO's `AvoidPattern` constraints guarantee the detected
+string is gone from the detected window, which a shifted copy of the same
+repeat survives: on mCherry, clearing the `CGCGCG` at 661-666 with a single
+free edit left the identical CG repeat one nucleotide to the left, at the
+same slippage probability, because the nucleotide holding it up sat in the
+neighbouring locked codon. Each retry therefore also unlocks one more codon
+on each side of every window, trading a little locality for the reach to
+finish the job - mCherry now ends the run clean, at a cost of one extra edit.
+Sites still detected when the rounds run out are reported in the run
+summary's `warnings` rather than passed off as repaired.
+
+This runs on every ORF-optimization candidate before evaluation, so the
+reported scores describe the sequence that actually ships. Z-Score methods
+produce several candidates (`1 + ZSCORE_INITIAL_PERMUTATIONS_NUM`, doubled for
+`max_CAI_tAI`), so expect a corresponding slowdown with those methods.
+
+The results screen shows every detected site highlighted on the sequence *as it
+was before repair*, colour-coded by type, with a list of their positions
+(1-indexed and inclusive, the way a position is normally read). Below it, the
+before/after diff shows which nucleotides actually changed. The two are not the
+same set: a site can be detected and reported but left unedited when it is too
+narrow to disrupt with a synonymous codon swap, and in that case the panel says
+so rather than claiming the sequence was clean.
+
+While it is enabled, DCUB's own repeat-avoidance ("dedup") heuristic is turned
+off for that run - ESO's slippage and recombination detection measures the same
+thing directly.
+
+It is **off by default**; runs without it are unaffected.
+
+#### Motif detection is off by default
+
+Motif detection (`dam`, `dcm`, and ESO's other bundled motifs) is **off by
+default**, unlike slippage and recombination detection, which are always on
+whenever hotspot avoidance is enabled. It is dominated by false positives:
+ESO's PSSM-based motif scanner keeps every position that scores above random
+chance against the motif, which is the right behavior for a genuinely
+degenerate binding motif but not for a fixed consensus like `dam`'s `GATC` -
+Dam methylase only acts on the exact sequence, so a 3-of-4 near-match carries
+no real methylation risk. Measured on a 711nt real gene (mCherry against E.
+coli/B. subtilis): motif detection reported 83 hits and drove 72 edits
+touching **24.9%** of the gene's codons, but of the 37 `dam` hits, only **2**
+were genuine `GATC` sites - the rest were near-matches like `GATG`, `GTTC`,
+`TATC`, `CATC`.
+
+Turning the switch on enables all five of ESO's bundled motifs. Three of them
+(`shine_dalgarno`, `sigma70_minus35`, `sigma70_minus10`) are regulatory
+elements - a ribosome binding site and the promoter -35/-10 boxes - rather
+than hypermutable sites, so avoiding them is a sequence-design choice, not a
+stability one. Narrow the set by dropping names from `COMMON_MOTIFS` below.
+
+The deeper fix (exact-consensus filtering, or tightening the PSSM threshold
+in ESO) is deferred to a follow-up; ESO itself is not modified by DCUB.
+
+To opt in, set **Advanced Options -> Hotspot Avoidance -> Motif detection**
+to **On**; the switch appears once hotspot avoidance itself is on.
+It is sent with the request as `enable_motif_detection`.
+
+For callers that don't go through the UI, the fallback lives in the
+`HOTSPOT_AVOIDANCE` section of `app/modules/configuration.yaml` and applies
+whenever a request omits the field:
+
+```yaml
+HOTSPOT_AVOIDANCE:
+  COMPUTE_MOTIFS: True
+  # ESO's full bundled set; drop names to narrow it
+  COMMON_MOTIFS: ["dam", "dcm", "shine_dalgarno", "sigma70_minus35", "sigma70_minus10"]
+```
+
+Translation is unaffected either way this setting is configured; this is a
+heads-up on edit volume and false-positive rate, not a correctness concern.
+
+#### Sub-codon slippage limitation
+
+ESO discards slippage-avoidance patterns narrower than 3nt whenever locked
+regions are present, so DCUB re-expresses sub-codon repeat units (a 15×`A` run
+becomes 5×`AAA`) before handing them over. A repeat too short to yield even one
+codon-width unit cannot be disrupted at codon resolution; those are reported in
+the run summary's `warnings` rather than silently skipped.
+
+In practice this no longer bites: the shortest span ESO's detector reports is
+12nt for a 1nt base unit and 6nt for a 2nt one, and both clear the one-unit
+minimum. The path is kept, and reported, for completeness.
+
+---
+
 ## Contact Details
 
 - Email: bentulila@mail.tau.ac.il  

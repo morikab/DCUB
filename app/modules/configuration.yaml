@@ -10,3 +10,36 @@ ORF:
   ZSCORE_INITIAL_PERMUTATIONS_NUM: 3
   FREQUENCY_OPTIMIZATION_THRESHOLD: 0.1
   DEDUP_CODONS: False
+HOTSPOT_AVOIDANCE:
+  # Motif detection is OFF by default. ESO's PSSM-based motif scan keeps every
+  # position scoring above random chance, so a fixed consensus like dam's GATC
+  # also matches 3-of-4 near-matches that carry no methylation risk. Measured on
+  # mCherry: 37 "dam" hits of which only 2 were real GATC sites, driving edits to
+  # ~25% of the gene's codons. Recombination and slippage detection are
+  # unaffected and remain on.
+  # This is the fallback only: the UI sends enable_motif_detection with every
+  # request (Advanced Options -> Hotspot Avoidance -> Methylation motif
+  # detection), and a request that carries the field overrides this value.
+  COMPUTE_MOTIFS: False
+  # Used only when COMPUTE_MOTIFS is True. ESO's full bundled set: the two
+  # methylation motifs (dam, dcm) plus three regulatory elements - the
+  # Shine-Dalgarno ribosome binding site and the sigma70 -35/-10 promoter
+  # hexamers. The regulatory three are not hypermutable sites, so avoiding
+  # them is a sequence-design choice rather than a stability one; they are
+  # included because the switch is presented as "detect ESO's motifs", not
+  # "detect methylation only". Drop names from this list to narrow it.
+  COMMON_MOTIFS: ["dam", "dcm", "shine_dalgarno", "sigma70_minus35", "sigma70_minus10"]
+  # How many detect-repair rounds to run at most. Repair is verified by
+  # re-detecting on its own output: ESO's AvoidPattern constraints only
+  # guarantee the detected string is gone from the detected window, which a
+  # shifted copy of the same repeat survives. Each retry also unlocks one
+  # more codon on each side of every window, so later rounds reach further
+  # out of the hotspot - at some cost to how local the edits stay. 1
+  # disables retrying, but still reports what the verification pass found.
+  MAX_REPAIR_ROUNDS: 5
+  # Detector mode selection is deliberately NOT configured here. ESO already
+  # defaults to "thorough" recombination and "default" slippage, and restating
+  # those values only creates a second place to drift from if ESO ever changes
+  # them. patch_sequence takes recombination_mode / slippage_mode keyword
+  # arguments for a caller that genuinely needs to override; left unset,
+  # nothing is passed and ESO's own default applies.

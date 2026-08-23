@@ -41,4 +41,89 @@ export interface OptimizationResult {
     is_wanted: boolean
     dist_score: number
   }>
+  hotspot_avoidance?: HotspotAvoidanceResult
+}
+
+export type HotspotKind = "recombination" | "slippage" | "motifs"
+
+/**
+ * One detected hypermutable window. 0-indexed with an EXCLUSIVE end, so
+ * `sequence_before.slice(start, end)` is exactly the hotspot.
+ *
+ * These mark what was DETECTED, not what was edited - a window too narrow to
+ * disrupt at codon resolution is reported here and deliberately left alone.
+ */
+export interface HotspotRegion {
+  kind: HotspotKind
+  start: number
+  end: number
+}
+
+export interface HotspotAvoidanceResult {
+  enabled: boolean
+  sequence_before: string
+  sequence_after: string
+  num_edits: number
+  detected_sites: { recombination: number; slippage: number; motifs: number }
+  detected_regions: HotspotRegion[]
+  /** How many detect-repair rounds ran. Repair re-detects on its own output
+   *  and retries, so this is 1 for a site cleared on the first attempt. */
+  rounds: number
+  /** Sites the final verification pass STILL found, in sequence_after
+   *  coordinates. Non-empty means the shipped sequence is not fully clean;
+   *  the same fact is spelled out in `warnings`. */
+  residual_regions: HotspotRegion[]
+  warnings: string[]
+}
+
+/** One organism as the backend's `user_input_dict.organisms` map expects it. */
+export interface OrganismRequestPayload {
+  genome_path: string
+  optimized: boolean
+  expression_data_type?: string
+  expression_file_format?: string
+  expression_file_path: string | null
+  optimization_priority: number
+}
+
+/**
+ * The server's raw JSON, before parseOptimizationResponse normalizes it.
+ * Only the fields that parser reads are declared.
+ *
+ * `final_evaluation` is required rather than optional on purpose: the parser
+ * dereferences it directly and relies on the surrounding try/catch to turn a
+ * missing one into "Invalid response format from server". Making it optional
+ * here would force optional chaining and silently produce a result object
+ * full of defaults instead of surfacing the bad response.
+ */
+export interface RawOptimizationResponse {
+  final_evaluation: {
+    final_sequence?: string
+    average_distance_score?: number
+    ratio_score?: number
+    weakest_link_score?: number
+    organisms_dist_scores?: Array<{
+      name: string
+      is_wanted: boolean
+      dist_score: number
+    }>
+  }
+  original_sequence?: string
+  processing_time?: number
+  timestamp?: string
+  hotspot_avoidance?: {
+    enabled?: boolean
+    sequence_before?: string
+    sequence_after?: string
+    num_edits?: number
+    detected_sites?: {
+      recombination?: number
+      slippage?: number
+      motifs?: number
+    }
+    detected_regions?: Array<{ kind: HotspotKind; start: number; end: number }>
+    rounds?: number
+    residual_regions?: Array<{ kind: HotspotKind; start: number; end: number }>
+    warnings?: string[]
+  }
 }

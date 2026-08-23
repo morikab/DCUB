@@ -11,6 +11,7 @@ import { Progress } from "@/components/ui/progress"
 import { Upload, FileText, X, Download, Info } from "lucide-react"
 import { useOptimizationStore } from "@/lib/store"
 import { validateFastaSequence } from "@/lib/validation"
+import type { ElectronFile } from "@/lib/electron-utils"
 
 export function DnaSequenceInput() {
   const [uploadProgress, setUploadProgress] = useState(0)
@@ -136,7 +137,7 @@ export function DnaSequenceInput() {
       setSequenceFile(file)
       // For web browsers, we can't get the full path due to security restrictions
       // But we can simulate it or use the webkitRelativePath if available
-      const fullPath = (file as any).path || file.webkitRelativePath || `/path/to/${file.name}`
+      const fullPath = (file as ElectronFile).path || file.webkitRelativePath || `/path/to/${file.name}`
       setSequenceFilePath(fullPath)
       setDnaSequence(sequence) // Store only the sequence for API
       setDisplayText("") // Clear manual entry when file is uploaded
@@ -149,7 +150,7 @@ export function DnaSequenceInput() {
         setIsUploading(false)
         setUploadProgress(0)
       }, 500)
-    } catch (error) {
+    } catch {
       setValidationError("Error reading file. Please try again.")
       setIsUploading(false)
       setUploadProgress(0)

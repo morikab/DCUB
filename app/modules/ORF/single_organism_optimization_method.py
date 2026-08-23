@@ -47,7 +47,10 @@ def optimize_sequence(
         "aa_to_optimal_codon": aa_to_optimal_codon,
         "run_time": timer.elapsed_time,
     }
-    run_summary.add_to_run_summary("orf", orf_summary)
+    # append_, not add_: see the matching note in
+    # single_codon_optimization_method.optimize_sequence - a max_CAI_tAI run
+    # reaches here once per CUB index against one RunSummary.
+    run_summary.append_to_run_summary("orf", orf_summary)
     return optimized_sequence
 
 # --------------------------------------------------------------

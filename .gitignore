@@ -90,3 +90,17 @@ ui/DCUB/backend/
 ###############################################################################
 docs/superpowers/
 .worktrees/
+
+###############################################################################
+# Pipeline run byproducts
+###############################################################################
+# Running the pipeline writes a parsed copy of each input genome next to the
+# working directory ("Escherichia coli.fasta" etc.) and a log under artifacts/.
+# Anchored to the repo root and app/ so genuine fixtures such as
+# analysis/example_data/*.fasta stay tracked.
+/*.fasta
+/app/*.fasta
+/app/modules/artifacts/
+# Optimization output written by a local run (output_path defaults to
+# results/DCUB/<timestamp>).
+/results/

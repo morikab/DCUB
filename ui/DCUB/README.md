@@ -8,7 +8,7 @@ A DNA sequence optimization tool that uses GenBank genome files to configure opt
 - **Organism Configuration**: Add wanted and unwanted organisms with GenBank genome files (.gb/.gbf)
 - **Priority System**: Set optimization priorities (1-100) for each organism
 - **Expression Data**: Optional CSV files with expression data
-- **Advanced Options**: Tuning parameters, optimization methods, and CUB index selection
+- **Advanced Options**: Trade-off parameter, optimization methods, and CUB index selection
 - **Backend Integration**: POST requests to localhost:8000/run_modules endpoint
 
 ## Getting Started

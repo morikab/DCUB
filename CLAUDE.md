@@ -94,6 +94,213 @@ Pipeline stages, each implemented as a `*Module` class with a `run_module()` sta
 
 6. **UserOutputModule** (`user_IO/user_output.py`) — Writes the optimized sequence as a FASTA file and bundles it with the run log into a `communique_results.zip`.
 
+### Hotspot avoidance (`app/modules/hotspot_avoidance/`)
+
+Optional stage (`enable_hotspot_avoidance`, default `False`) that runs ESO's
+hypermutable-site detection and repair on every ORF-optimization candidate,
+between `run_orf_optimization()` and `run_evaluation()` in `main.py`.
+
+It must run *before* evaluation: selection IS the evaluation step
+(`choose_orf_optimization_result` compares scores over every candidate), so
+patching only the winner afterwards would make `final_evaluation` describe a
+sequence that isn't what ships.
+
+- `exclusion_regions.py` - interval algebra. `build_exclusion_regions` returns
+  the complement of the codon-boundary-widened hotspot windows, which becomes
+  DNAChisel `AvoidChanges` constraints. This is what makes locality mechanical
+  rather than hoped-for. The initiation-optimized prefix
+  (`skipped_codons_num * 3`) is always locked, or ESO would undo
+  `InitiationModule`'s weak-folding work.
+  `labeled_hotspot_regions_from_detection` is the single place each detector's
+  differing coordinate convention is normalized (recombination reports a *pair*
+  of windows per row; methylation's `end_index` is **inclusive** and gets the
+  `+ 1`). `hotspot_regions_from_detection` is the tuple-only view of the same
+  windows, so the constraint path and the UI cannot drift apart.
+  The labeled form reaches the UI as `summary["detected_regions"]`:
+  `{"kind", "start", "end"}`, 0-indexed exclusive-end into `sequence_before`.
+  These are what was **detected**, not what was edited - a window too narrow to
+  disrupt at codon resolution appears here and is deliberately left alone,
+  which is exactly the case the panel needs in order to explain a 0-edit run
+  that still found sites.
+- `dcub_score_adapter.py` - `build_dcub_score_fn` is the entry point: DCUB's
+  preference model as the `score(seq) -> float` callable ESO's `CustomScore`
+  wants, **higher is better**, for any optimization method.
+  - `single_wanted_organism` is scored with **`general_geomean`** against the
+    wanted organism's CUB profile - the same routine `EvaluationModule` and the
+    zscore path call. Not a summed table: a sum ranks single-codon swaps
+    identically but weighs multi-codon moves differently, and a hotspot window
+    usually spans several codons, so repair should optimize the quantity
+    selection is later scored on. It also substitutes the profile's mean weight
+    for a codon the profile omits (a hand-built table defaulted those to 0.0,
+    which in a geometric mean zeroes the whole score) and skips Met/Trp/stop,
+    which have no choice to optimize.
+  - `single_codon_*` picks per-amino-acid argmin of a loss table combining
+    wanted and unwanted organisms, so it has no CUB profile to score against
+    directly. `loss_table_to_weights` maps that loss onto **CAI-style weights in
+    (0, 1], normalized per amino acid so the codon DCUB would choose scores
+    exactly 1.0**, and `make_dcub_custom_score` then scores with the same
+    `general_geomean`. All three families therefore share one aggregation and
+    one scale, on which a fully DCUB-optimal ORF scores 1.0.
+
+    A plain negation cannot be used: losses are sums of squares, so negating
+    gives values <= 0 and `gmean` returns `nan`. The floor
+    (`DCUB_WEIGHT_FLOOR`) is strictly positive because `general_geomean`
+    silently DROPS a codon whose weight is exactly 0 - it evaluates
+    `ValueError()` without raising, then appends nothing - so a zero would
+    shorten the sequence instead of penalizing it.
+
+    Normalized per amino acid, not globally, matching the CAI/tAI convention
+    (`RSCU / max(RSCU of that synonymous family)`); a global normalization would
+    make the achievable maximum depend on which amino acids the gene contains.
+    Amino acids whose codons all tie get a flat 1.0 - spreading them over the
+    range would invent a preference DCUB does not have.
+
+    Measured effect, on the realistic input - a repeat made of codons DCUB
+    ALREADY chose, which is what hotspot avoidance actually receives, since it
+    runs on an already-optimized candidate. Repair has to give something up,
+    and it gives up the cheapest thing in the **codon-widened detected window**,
+    which is usually wider than the repeat itself:
+    - when a codon in the window has tied synonyms, it breaks the repeat there
+      for zero cost and leaves the preferred codons of the repeat intact;
+    - when every codon has a strict preference, it takes the single cheapest
+      concession available (Arg 1.000 -> 0.969, over Ala's 0.040 and Val's
+      0.990) and moves to that amino acid's RUNNER-UP, not an arbitrary
+      alternative.
+
+    Do not "verify" this by planting deliberately bad codons and checking the
+    optimum is chosen - that is near-tautological, and it misses the behaviour
+    that matters.
+  - `zscore_*` does **not** decompose - its score is a property of the whole
+    sequence - and is evaluated **exactly**, per trial sequence, by
+    `_exact_zscore_score_fn`. It previously used a per-codon proxy table built
+    from "what if every codon of this amino acid became X?", which measured a
+    structurally different quantity from DCUB's positional, iterative zscore
+    optimization. Exact evaluation is affordable *because* of the locality
+    lock: only hotspot codons are editable, so few trials run. Measured at
+    0.383 ms/call on a 711nt gene, against 64 such calls that the discarded
+    proxy table spent building itself. The ratio family still needs the sweep
+    once, for fixed normalization bounds - a geometric mean is undefined for
+    negative z-scores, and bounds that moved per trial would make successive
+    scores incomparable.
+  - **The rare-codon floor applies to all of them.** DCUB's own
+    `_get_optimal_codon` skips any codon whose mean frequency across the wanted
+    hosts is below `config["ORF"]["FREQUENCY_OPTIMIZATION_THRESHOLD"]`. That
+    floor is invisible to a negated-loss table, so the optimizer could install a
+    codon DCUB itself refused (verified: Cys weighted so `TGT` has the minimal
+    loss but 0.02 mean frequency - DCUB picks `TGC`, the raw table picks `TGT`).
+    `apply_rare_codon_penalty` subtracts `RARE_CODON_PENALTY` per offending
+    codon *on the score* rather than editing a table, so it reaches the zscore
+    family too. Amino acids whose every codon is below the floor are exempt,
+    mirroring `_get_optimal_codon`'s own fallback. The penalty can never block a
+    repair: DNAChisel objectives are soft and `resolve_constraints()` runs
+    first, so it only decides which legal codon is used.
+- `hotspot_avoidance_main.py` - `widen_slippage_base_units` re-expresses
+  **sub-codon** slippage base units at `lcm(base_unit, 3)`, working around
+  ESO's `exclusion_site_correcter` discarding every avoidance row narrower than
+  3nt once exclusions are present (which this module always passes). Units of
+  3nt and wider are left alone - widening those breaks repairs that already
+  worked.
+
+  It declares `num_base_units = max(2, whole_units)`. ESO's
+  `modify_df_slippage` iterates `range(0, num_base_units - 1, 2)` and so emits
+  nothing below 2, which used to discard any repeat shorter than **two** widened
+  units - 12nt for a dinucleotide. Declaring 2 makes that loop emit chunk 0,
+  which *is* the real repeat, halving the minimum repairable run.
+
+  **This is not the same as padding the window outward**, and the difference is
+  a correctness one. A padded row makes ESO avoid a pattern straddling the
+  repeat's flank, which DNAChisel can satisfy by editing the *flank* - measured
+  on mCherry, padding one codon each side of `CGCGCG` at 660-666 produced
+  `GAG`->`GAA`, reported one edit, and left the repeat completely intact. A
+  false "repaired" is worse than the honest warning it replaces. Anchoring on
+  the repeat produced `GCG`->`GCC` and destroyed it.
+
+  `_chunks_outside_detected_windows` enforces that distinction at runtime
+  rather than by comment: it re-derives the chunks ESO will build and reports
+  any that escape their detected window. It exists because the `max(2, ...)`
+  trick depends on the loop bound in the **ESO revision pinned in
+  pyproject.toml**; if an upgrade changed it to `range(0, num_base_units, 2)`,
+  chunk 1 would constrain sequence that was never a hotspot. The guard turns
+  that into a message naming the cause instead of a spray of
+  dropped-constraint warnings.
+
+- `hotspot_avoidance_main.py` - detection plus the `eso.optimize.optimization_engine`
+  call. Reads `config["HOTSPOT_AVOIDANCE"]` (module-scope `config =
+  Configuration.get_config()`, matching `orf_main.py`'s pattern) **inside**
+  `patch_sequence`, not as a signature default - a signature default is
+  evaluated once at import time and can never be monkeypatched, which one of
+  the module's own tests depends on.
+
+Motif detection (`COMPUTE_MOTIFS` in `configuration.yaml`'s
+`HOTSPOT_AVOIDANCE` section) is **off by default**; slippage and
+recombination detection are always on. ESO's PSSM-based motif scanner keeps
+every position scoring above random chance, which is correct for a
+genuinely degenerate binding motif but wrong for a fixed consensus like
+`dam`'s `GATC` - a 3-of-4 near-match (`GATG`, `GTTC`, ...) carries no real
+methylation risk but still scores positive. Measured on a 711nt real gene
+(mCherry against E. coli/B. subtilis): motif detection produced 83 hits
+driving 72 edits across 24.9% of the gene's codons, and of 37 `dam` hits
+only 2 were genuine `GATC` sites. `COMMON_MOTIFS` also defaults to `["dam",
+"dcm"]` rather than ESO's full bundle - `shine_dalgarno` and the two
+`sigma70` boxes are regulatory elements, not hypermutable sites. The deeper
+fix (exact-consensus filtering or a tighter PSSM threshold) belongs in ESO
+and is deferred to a follow-up spec.
+
+Only `COMPUTE_MOTIFS` and `COMMON_MOTIFS` are configured. Detector mode
+selection is deliberately not: ESO already defaults to `"thorough"`
+recombination and `"default"` slippage, so naming those values here would
+only pin whatever ESO's defaults were when this was written.
+`patch_sequence` and `HotspotAvoidanceModule.run_module` still take
+`recombination_mode`/`slippage_mode` keyword arguments for a caller that
+needs to override; left unset, neither is passed and ESO's default applies.
+
+`COMMON_MOTIFS` is a different case and must NOT be dropped for the same
+"just use ESO's default" reason. ESO's default is `None`, and
+`suspect_site_extractor` guards with `if common_motifs:` - so with no
+`motifs_path` the motif list stays empty and `find_motif_sites` returns an
+empty frame. Motif detection would be switched on and silently detect
+nothing. Verified: a sequence carrying 5x `GATC` and 4x `CCAGG` reports 0
+motif rows with the ESO default and 12 with `["dam", "dcm"]`. Enabling
+`COMPUTE_MOTIFS` with an empty `COMMON_MOTIFS` now raises instead.
+
+Three non-obvious details in the `optimization_engine` call, each guarding a
+real failure:
+- `orf_regions=[(0, len(sequence))]` is passed explicitly. The default is
+  `((len(seq) - 1) // 3) * 3`, which silently drops the last codon of a
+  length-multiple-of-3 sequence.
+- `mini_gc=0.0, maxi_gc=1.0` disables GC enforcement. DCUB doesn't manage GC,
+  and with everything outside the hotspots locked an out-of-range window is
+  unfixable - ESO's retry loop would drop the constraint and emit a warning
+  that means nothing to the user.
+- ESO's `CustomScore` always warns about per-trial rescoring cost; that warning
+  is filtered out of the user-facing `warnings` list, which is reserved for
+  genuine "could not clear this hotspot" reports.
+
+### Run-summary keys are scoped, because writers run more than once
+
+`RunSummary.add_to_run_summary` raises `KeyError` on a duplicate key, and
+`run_orf_optimization` (`main.py`) calls `ORFModule.run_module` **twice** —
+once for tAI, once for CAI — against the *same* `RunSummary` whenever the
+index is `max_codon_trna_adaptation_index`. Any unscoped key written on that
+path therefore collides on the second call. Two did, so `max_CAI_tAI` combined
+with a `single_codon_*` or `single_wanted_organism` method could not run at
+all. Both are fixed:
+
+- The per-codon loss breakdown is keyed via
+  `orf_detailed_summary_key(cub_index, stage=...)` →
+  `"orf_detailed_CAI"` / `"orf_detailed_tAI"`, with hotspot avoidance
+  recording its own recomputation under `"hotspot_avoidance_detailed_<index>"`.
+  It writes with `put_in_run_summary`: the table is a pure function of exactly
+  the inputs the key is derived from, so a repeat write is the same value by
+  construction (hotspot avoidance patches each ORF candidate in turn).
+  This key was previously the unscoped `"orf_debug"`.
+- `"orf"` uses `append_to_run_summary` in all three method families, which is
+  what the zscore methods already did. `get_orf_summary`
+  (`analysis/orf_model_analysis/generate_summary_file.py`) reads the list.
+
+Don't reintroduce an unscoped `add_to_run_summary` on this path — pass a
+`summary_key`, or append.
+
 ### Key shared types (`app/modules/models.py`)
 
 - `UserInput` (Pydantic) — API request body; organism genomes are keyed by name as `Dict[str, OrganismRequest]`

@@ -14,6 +14,7 @@ import { Plus, Trash2, Download, Upload, FileText, X, ChevronDown, ChevronUp } f
 import { useOptimizationStore } from "@/lib/store"
 import type { Organism } from "@/lib/types"
 import { ErrorDialog } from "@/components/error-dialog"
+import type { ElectronFile, ElectronFileOperationResult } from "@/lib/electron-utils"
 
 const downloadExpressionSample = (
   format: "csv" | "json" = "json",
@@ -719,6 +720,15 @@ interface FileInputProps {
   onOrganismNameSuggestion?: (name: string) => void 
 }
 
+/** Where a browser-mode genome/expression file is uploaded to obtain the
+ *  server-side path /run-modules needs. Electron skips this entirely - there
+ *  the OS file dialog already hands back a real path. */
+const UPLOAD_URL = "http://localhost:8000/upload-file"
+
+/** A failure with a message worth showing verbatim, as opposed to an
+ *  unexpected one that falls back to the generic wording. */
+class FileLoadError extends Error {}
+
 function FileInput({ 
   id, 
   placeholder, 
@@ -799,13 +809,30 @@ function FileInput({
       // Electron exposes file.path; browsers don't. In dev (browser) mode, upload the
       // file to the backend so it gets a real server-side path for /run-modules.
       let fullPath: string
-      if ((file as any).path) {
-        fullPath = (file as any).path
+      const electronPath = (file as ElectronFile).path
+      if (electronPath) {
+        fullPath = electronPath
       } else {
         const formData = new FormData()
         formData.append("file", file)
-        const uploadRes = await fetch("http://localhost:8000/upload-file", { method: "POST", body: formData })
-        if (!uploadRes.ok) throw new Error("File upload to dev server failed")
+        let uploadRes: Response
+        try {
+          uploadRes = await fetch(UPLOAD_URL, { method: "POST", body: formData })
+        } catch {
+          // fetch only rejects like this when the request never reached a
+          // server. Reported separately because the generic handler below says
+          // "Error reading file", which sends you looking at the genome file
+          // when the actual problem is that nothing is listening on :8000.
+          throw new FileLoadError(
+            "Cannot reach the optimization server on localhost:8000. Start the backend " +
+              "(poetry run python app/api_server.py) and try again.",
+          )
+        }
+        if (!uploadRes.ok) {
+          throw new FileLoadError(
+            `The optimization server rejected the upload (HTTP ${uploadRes.status}).`,
+          )
+        }
         const { file_path } = await uploadRes.json()
         fullPath = file_path
       }
@@ -826,7 +853,9 @@ function FileInput({
         setUploadProgress(0)
       }, 500)
     } catch (error) {
-      setValidationError("Error reading file. Please try again.")
+      setValidationError(
+        error instanceof FileLoadError ? error.message : "Error reading file. Please try again.",
+      )
       setIsUploading(false)
       setUploadProgress(0)
     }
@@ -847,23 +876,25 @@ function FileInput({
   }
 
   const handleBrowseClick = async () => {
-    const electronAPI = typeof window !== "undefined" ? (window as any).electronAPI : null
+    const electronAPI = typeof window !== "undefined" ? window.electronAPI : null
     if (electronAPI?.isElectron) {
       const extensions = accept.split(",").map((e: string) => e.trim().replace(".", ""))
-      let result: any
+      let result: ElectronFileOperationResult | undefined
       try {
-        result = await electronAPI.fileOperations("select-file", {
+        result = await electronAPI.fileOperations?.("select-file", {
           filters: [{ name: `${fileType} Files`, extensions }],
         })
       } catch {
         setValidationError("Error opening file dialog. Please try again.")
         return
       }
-      if (!result?.success) return  // canceled
+      // Cancelled, unknown-operation and thrown-error replies all come back
+      // as success:false; only the "picked a file" reply carries these three.
+      if (!result?.success || !result.fileName || !result.filePath || result.content === undefined) return
 
       const { filePath, fileName, content } = result
 
-      const fileExtension = (fileName as string).toLowerCase().split(".").pop() || ""
+      const fileExtension = fileName.toLowerCase().split(".").pop() || ""
       const acceptedExtensions = accept.split(",").map((e: string) => e.trim().replace(".", ""))
       if (!acceptedExtensions.includes(fileExtension)) {
         setValidationError(`Please upload a ${fileType} file (${accept})`)

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require("electron")
+const { app, BrowserWindow, ipcMain, dialog, shell } = require("electron")
 const path = require("path")
 const os = require("os")
 const { spawn, exec } = require('child_process');
@@ -31,7 +31,7 @@ const traceFile = path.join(os.tmpdir(), "electron-trace.txt");
 function trace(msg) {
   try {
     fsSync.appendFileSync(traceFile, `[${Date.now()}] ${msg}\n`);
-  } catch (_) {}
+  } catch {}
 }
 
 process.on("SIGTERM", cleanupChildProcesses);
@@ -181,6 +181,16 @@ function createWindow() {
     titleBarStyle: "default",
     show: false,
   })
+
+  // Links marked target="_blank" (e.g. the ESO homepage in Advanced
+  // Options) belong in the user's browser, not in a chromeless Electron
+  // window they cannot navigate back out of.
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith("https://") || url.startsWith("http://")) {
+      shell.openExternal(url);
+    }
+    return { action: "deny" };
+  });
 
   mainWindow.loadFile(
     path.join(__dirname, "loading.html")

@@ -16,6 +16,8 @@ interface OptimizationState {
   tuningParameter: number
   optimizationMethod: string
   cubIndex: string
+  enableHotspotAvoidance: boolean
+  enableMotifDetection: boolean
 
   // Actions
   setDnaSequence: (sequence: string) => void
@@ -33,6 +35,8 @@ interface OptimizationState {
   setTuningParameter: (value: number) => void
   setOptimizationMethod: (method: string) => void
   setCubIndex: (index: string) => void
+  setEnableHotspotAvoidance: (enabled: boolean) => void
+  setEnableMotifDetection: (enabled: boolean) => void
 
   reset: () => void
 }
@@ -46,6 +50,19 @@ const initialState = {
   tuningParameter: 50,
   optimizationMethod: "single_codon_diff",
   cubIndex: "CAI",
+  enableHotspotAvoidance: false,
+  enableMotifDetection: false,
+}
+
+/** Dropdown values that predate the fix for the 422 on every Z-Score method.
+ *  A browser that ran the old build has one of these persisted, and would keep
+ *  sending it after the fix, so rehydration maps them to the enum values the
+ *  backend accepts. */
+const RENAMED_OPTIMIZATION_METHODS: Record<string, string> = {
+  zscore_bulk_diff: "zscore_bulk_aa_diff",
+  zscore_bulk_ratio: "zscore_bulk_aa_ratio",
+  zscore_single_diff: "zscore_single_aa_diff",
+  zscore_single_ratio: "zscore_single_aa_ratio",
 }
 
 export const useOptimizationStore = create<OptimizationState>()(
@@ -90,11 +107,24 @@ export const useOptimizationStore = create<OptimizationState>()(
       setTuningParameter: (value) => set({ tuningParameter: value }),
       setOptimizationMethod: (method) => set({ optimizationMethod: method }),
       setCubIndex: (index) => set({ cubIndex: index }),
+      setEnableHotspotAvoidance: (enabled) => set({ enableHotspotAvoidance: enabled }),
+      setEnableMotifDetection: (enabled) => set({ enableMotifDetection: enabled }),
 
       reset: () => set(initialState),
     }),
     {
       name: "dna-optimization-storage",
+      version: 1,
+      migrate: (persistedState, version) => {
+        if (version >= 1 || typeof persistedState !== "object" || persistedState === null) {
+          return persistedState as OptimizationState
+        }
+        const state = persistedState as Partial<OptimizationState>
+        const renamed = state.optimizationMethod
+          ? RENAMED_OPTIMIZATION_METHODS[state.optimizationMethod]
+          : undefined
+        return (renamed ? { ...state, optimizationMethod: renamed } : state) as OptimizationState
+      },
       partialize: (state) => ({
         dnaSequence: state.dnaSequence,
         wantedOrganisms: state.wantedOrganisms,
@@ -102,6 +132,8 @@ export const useOptimizationStore = create<OptimizationState>()(
         tuningParameter: state.tuningParameter,
         optimizationMethod: state.optimizationMethod,
         cubIndex: state.cubIndex,
+        enableHotspotAvoidance: state.enableHotspotAvoidance,
+        enableMotifDetection: state.enableMotifDetection,
       }),
     },
   ),

@@ -19,6 +19,16 @@ if "%GENETIC_CODE_PATH%"=="" (
     exit /b 1
 )
 
+for /f "usebackq delims=" %%i in (`
+poetry run python -c "import eso, os; print(os.path.join(os.path.dirname(eso.__file__), 'data'))"
+`) do set ESO_DATA_PATH=%%i
+echo Using eso data directory at: %ESO_DATA_PATH%
+
+if "%ESO_DATA_PATH%"=="" (
+    echo ERROR: Failed to locate eso data directory
+    exit /b 1
+)
+
 REM --------------------------------------------------
 REM 2. Run PyInstaller
 REM --------------------------------------------------
@@ -27,6 +37,7 @@ poetry run pyinstaller ^
   --onedir ^
   --name fastapi_server ^
   --add-data "%GENETIC_CODE_PATH%;codonbias" ^
+  --add-data "%ESO_DATA_PATH%;eso\data" ^
   --add-data "app\modules\configuration.yaml;modules" ^
   app\api_server.py
 

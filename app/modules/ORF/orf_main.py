@@ -19,6 +19,16 @@ logger = LoggerFactory.get_logger()
 
 class ORFModule(object):
     @staticmethod
+    def should_dedup_codons(enable_hotspot_avoidance: bool) -> bool:
+        """DCUB's dedup heuristic is retired in favour of ESO's slippage and
+        recombination detection when hotspot avoidance is on - two heuristics
+        solving the same problem from different angles is worth collapsing
+        into the one that measures the thing directly."""
+        if enable_hotspot_avoidance:
+            return False
+        return config["ORF"]["DEDUP_CODONS"]
+
+    @staticmethod
     def run_module(
             module_input: models.ModuleInput,
             optimization_cub_index: models.ORFOptimizationCubIndex,
@@ -40,6 +50,9 @@ class ORFModule(object):
                 tuning_param=module_input.tuning_parameter,
                 skipped_codons_num=skipped_codons_num,
                 run_summary=run_summary,
+                should_dedup_codons=ORFModule.should_dedup_codons(
+                    module_input.enable_hotspot_avoidance
+                ),
             )
             validate_module_output(original_sequence=module_input.sequence, new_sequence=result)
             return [result]
@@ -88,6 +101,9 @@ class ORFModule(object):
             optimization_cub_index=optimization_cub_index,
             skipped_codons_num=skipped_codons_num,
             run_summary=run_summary,
+            should_dedup_codons=ORFModule.should_dedup_codons(
+                module_input.enable_hotspot_avoidance
+            ),
         )
 
         results = []

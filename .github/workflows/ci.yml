@@ -1,0 +1,92 @@
+name: CI
+
+# The only other workflow, build_electron.yml, is workflow_dispatch-only on
+# purpose: it packages desktop apps for three platforms and can publish a
+# GitHub Release, which is not something to do on every push. That left pull
+# requests with no checks at all. This workflow is the cheap one that runs
+# automatically.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+# A new push to a PR makes the in-flight run obsolete.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Backend (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # pyproject pins python = "~3.11".
+        python-version: ["3.11"]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install Poetry
+        run: |
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install poetry
+
+      - name: Verify poetry.lock is in sync with pyproject.toml
+        # Guards the specific failure that made the lock go stale: `eso` was a
+        # relative path dependency, which cannot resolve from a git worktree or
+        # from CI, so `poetry lock` could not be run and the lock drifted.
+        run: poetry check --lock
+
+      - name: Install dependencies
+        # --with build is what build_electron.yml uses, so this is the install
+        # that has to keep working for a release build to be possible at all.
+        # `eso` resolves from a pinned git revision here.
+        run: poetry install --no-interaction --with build,dev
+
+      - name: Run tests
+        run: poetry run pytest app/tests -q
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 23.11.0
+          cache: npm
+          cache-dependency-path: ui/DCUB/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ui/DCUB
+        run: npm ci
+
+      - name: Lint
+        working-directory: ui/DCUB
+        run: npm run lint
+
+      - name: Typecheck
+        working-directory: ui/DCUB
+        run: npx tsc --noEmit
+
+      - name: Build
+        # next.config.mjs no longer suppresses lint/type errors, so this also
+        # re-checks both in the configuration a release build actually uses.
+        working-directory: ui/DCUB
+        run: npm run build

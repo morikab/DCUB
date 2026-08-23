@@ -36,3 +36,8 @@ openpyxl~=3.1.2
 # For API server
 fastapi
 uvicorn
+
+# ESO is not on PyPI - install it from git at the revision pinned in
+# poetry.lock:
+#   pip install "eso @ git+https://github.com/itamar-menuhin/evolutionary-stability-optimizer.git@37f82bc"
+# (Poetry is the source of truth; see repo-root pyproject.toml.)

@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ArrowLeft, Download, Copy, CheckCircle, BarChart3, Dna, Clock, RefreshCw } from "lucide-react"
 import { OrganismDistChart } from "@/components/organism-dist-chart"
+import { HotspotAvoidancePanel } from "@/components/hotspot-avoidance-panel"
 import type { OptimizationResult } from "@/lib/types"
 
 interface ResultsScreenProps {
@@ -262,6 +263,13 @@ ${result.optimized_sequence}`
           </Card>
         </div>
 
+        {/* Hypermutable Site Avoidance - full width, like the CUB chart below.
+            Rendered only for a run that actually had hotspot avoidance on: the
+            backend omits the whole section otherwise. */}
+        {result.hotspot_avoidance?.enabled && (
+          <HotspotAvoidancePanel result={result.hotspot_avoidance} />
+        )}
+
         {/* Per-Organism CUB Difference */}
         <OrganismDistChart organismsDistScores={result.organisms_dist_scores} />
 
@@ -277,7 +285,7 @@ ${result.optimized_sequence}`
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
               <div className="bg-blue-50 p-3 rounded-lg">
-                <p className="text-sm font-medium text-blue-900">Tuning Parameter</p>
+                <p className="text-sm font-medium text-blue-900">Trade-off Parameter</p>
                 <p className="text-lg font-bold text-blue-700">{result.optimization_parameters.tuning_parameter}</p>
               </div>
               <div className="bg-purple-50 p-3 rounded-lg">

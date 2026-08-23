@@ -9,13 +9,22 @@ print(os.path.join(os.path.dirname(codonbias.__file__), "genetic_code_ncbi.csv")
 EOF
 )
 
+eso_data_path=$(poetry run python - << 'EOF'
+import os
+import eso
+print(os.path.join(os.path.dirname(eso.__file__), "data"))
+EOF
+)
+
 echo "Using genetic_code_ncbi.csv at: $csv_path"
+echo "Using eso data directory at: $eso_data_path"
 
 poetry run pyinstaller \
   --noconfirm \
   --onedir \
   --name fastapi_server \
   --add-data="${csv_path}:codonbias" \
+  --add-data="${eso_data_path}:eso/data" \
   --add-data="app/modules/configuration.yaml:modules" \
   app/api_server.py
   
