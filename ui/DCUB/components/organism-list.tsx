@@ -720,6 +720,15 @@ interface FileInputProps {
   onOrganismNameSuggestion?: (name: string) => void 
 }
 
+/** Where a browser-mode genome/expression file is uploaded to obtain the
+ *  server-side path /run-modules needs. Electron skips this entirely - there
+ *  the OS file dialog already hands back a real path. */
+const UPLOAD_URL = "http://localhost:8000/upload-file"
+
+/** A failure with a message worth showing verbatim, as opposed to an
+ *  unexpected one that falls back to the generic wording. */
+class FileLoadError extends Error {}
+
 function FileInput({ 
   id, 
   placeholder, 
@@ -806,8 +815,24 @@ function FileInput({
       } else {
         const formData = new FormData()
         formData.append("file", file)
-        const uploadRes = await fetch("http://localhost:8000/upload-file", { method: "POST", body: formData })
-        if (!uploadRes.ok) throw new Error("File upload to dev server failed")
+        let uploadRes: Response
+        try {
+          uploadRes = await fetch(UPLOAD_URL, { method: "POST", body: formData })
+        } catch {
+          // fetch only rejects like this when the request never reached a
+          // server. Reported separately because the generic handler below says
+          // "Error reading file", which sends you looking at the genome file
+          // when the actual problem is that nothing is listening on :8000.
+          throw new FileLoadError(
+            "Cannot reach the optimization server on localhost:8000. Start the backend " +
+              "(poetry run python app/api_server.py) and try again.",
+          )
+        }
+        if (!uploadRes.ok) {
+          throw new FileLoadError(
+            `The optimization server rejected the upload (HTTP ${uploadRes.status}).`,
+          )
+        }
         const { file_path } = await uploadRes.json()
         fullPath = file_path
       }
@@ -827,8 +852,10 @@ function FileInput({
         setIsUploading(false)
         setUploadProgress(0)
       }, 500)
-    } catch {
-      setValidationError("Error reading file. Please try again.")
+    } catch (error) {
+      setValidationError(
+        error instanceof FileLoadError ? error.message : "Error reading file. Please try again.",
+      )
       setIsUploading(false)
       setUploadProgress(0)
     }
