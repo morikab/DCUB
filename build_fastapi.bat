@@ -31,6 +31,12 @@ if "%ESO_DATA_PATH%"=="" (
 
 REM --------------------------------------------------
 REM 2. Run PyInstaller
+REM
+REM ESO pulls in DNAChisel, and both DNAChisel and python_codon_tables read
+REM data out of their own package directories AT IMPORT TIME, so without
+REM --collect-data the frozen server dies during import with a
+REM FileNotFoundError before it ever binds port 8000. Keep in step with
+REM build_fastapi.sh.
 REM --------------------------------------------------
 poetry run pyinstaller ^
   --noconfirm ^
@@ -39,6 +45,8 @@ poetry run pyinstaller ^
   --add-data "%GENETIC_CODE_PATH%;codonbias" ^
   --add-data "%ESO_DATA_PATH%;eso\data" ^
   --add-data "app\modules\configuration.yaml;modules" ^
+  --collect-data dnachisel ^
+  --collect-data python_codon_tables ^
   app\api_server.py
 
 if errorlevel 1 (
